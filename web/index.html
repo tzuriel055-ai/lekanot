@@ -201,9 +201,9 @@ const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
 
 async function sb(path, params = {}) {
   const qs = new URLSearchParams(params).toString();
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}?${qs}`, {
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
-  });
+  const headers = { apikey: SUPABASE_ANON_KEY };
+  if (!SUPABASE_ANON_KEY.startsWith("sb_")) headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}?${qs}`, { headers });
   if (!res.ok) throw new Error(`Supabase error ${res.status}: ${await res.text()}`);
   return res.json();
 }

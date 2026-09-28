@@ -18,10 +18,11 @@ SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
     "Content-Type": "application/json",
     "Prefer": "resolution=merge-duplicates,return=representation",
 }
+if not SUPABASE_KEY.startswith("sb_"):
+    HEADERS["Authorization"] = f"Bearer {SUPABASE_KEY}"
 
 
 def upsert(table: str, rows: list[dict[str, Any]], on_conflict: str) -> list[dict]:
