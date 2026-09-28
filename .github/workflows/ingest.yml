@@ -1,0 +1,26 @@
+name: ingest prices
+
+on:
+  schedule:
+    # כל 4 שעות. החוק מחייב עדכון עד אחת לשעה בשינויים - אפשר להדק בהמשך,
+    # רק לזכור שכל ריצה = כמה דקות ריצה בחינם מתוך המכסה החודשית של GitHub.
+    - cron: "17 */4 * * *"
+  workflow_dispatch: {}   # מאפשר גם להריץ ידנית מטאב Actions בגיטהאב
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r ingest/requirements.txt
+
+      - run: python -m ingest.main
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
