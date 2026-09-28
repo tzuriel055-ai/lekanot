@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from decimal import Decimal
 
@@ -25,6 +26,11 @@ from .sources.shufersal import ShufersalAdapter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ingest")
+
+# מגבלות לריצת ניסיון: בלי זה הריצה הראשונה תנסה למשוך מאות אלפי מוצרים.
+# מעלים אותן בהמשך דרך env ב-workflow.
+MAX_PRICE_FILES = int(os.environ.get("MAX_PRICE_FILES_PER_CHAIN", "2"))
+MAX_ITEMS = int(os.environ.get("MAX_ITEMS_PER_FILE", "300"))
 
 
 def build_adapter(chain: ChainConfig):
@@ -78,11 +84,15 @@ def run_chain(chain: ChainConfig) -> None:
         log.info("stores: upserted %d", len(saved))
 
     # 2) מחירים (ומוצרים כתוצר לוואי - upsert לפי gtin או alias)
+    price_files_done = 0
     for (kind, store_ext), ref in latest.items():
         if kind != "prices":
             continue
+        if price_files_done >= MAX_PRICE_FILES:
+            break
+        price_files_done += 1
         payload = adapter.download(ref)
-        items = parse_price_file(payload, default_store_id=store_ext)
+        items = parse_price_file(payload, default_store_id=store_ext)[:MAX_ITEMS]
         log.info("prices file %s: %d items", ref.label, len(items))
 
         store_uuid = store_uuid_by_ext.get(items[0].store_id_ext) if items else None
