@@ -49,9 +49,10 @@ CHAINS: list[ChainConfig] = [
     ),
     ChainConfig(
         id="victory",
-        display_name="ויקטורי",
+        display_name="ויקטורי - מושבת זמנית",
         portal_type="cerberus",
         portal_username="victory",
+        active=False,  # שם המשתמש בפורטל לא אומת עדיין
     ),
     ChainConfig(
         id="osherad",
