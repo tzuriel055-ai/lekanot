@@ -39,7 +39,7 @@ class ShufersalAdapter:
             resp = self.session.get(
                 f"{PORTAL_BASE}/FileObject/UpdateCategory",
                 params={"catID": cat_id, "storeId": 0, "page": 1},
-                timeout=30,
+                timeout=75,
             )
             resp.raise_for_status()
             for href in re.findall(r'href="([^"]+\.gz[^"]*)"', resp.text):

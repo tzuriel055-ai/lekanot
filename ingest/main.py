@@ -159,6 +159,22 @@ def run_chain(chain: ChainConfig) -> None:
                     "club_required": pr.club_required,
                 }
             )
+        # יכול להיות יותר ממבצע אחד על אותו מוצר באותו קובץ (למשל מבצע כללי
+        # ומבצע מועדון). Postgres מסרב לעדכן את אותה שורה פעמיים באותה פקודה,
+        # אז מאחדים כאן ובוחרים את המבצע המשתלם ביותר (המחיר הנמוך ביותר).
+        deduped: dict[str, dict] = {}
+        for row in promo_rows:
+            pid = row["product_id"]
+            current = deduped.get(pid)
+            if current is None:
+                deduped[pid] = row
+                continue
+            new_price = row.get("promo_price")
+            old_price = current.get("promo_price")
+            if new_price is not None and (old_price is None or float(new_price) < float(old_price)):
+                deduped[pid] = row
+        promo_rows = list(deduped.values())
+
         if promo_rows:
             db.upsert("promos", promo_rows, on_conflict="product_id,store_id")
         log.info("promos: upserted %d rows for store %s (skipped %d unmatched)", len(promo_rows), store_ext, skipped)
