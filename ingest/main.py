@@ -27,10 +27,10 @@ from .sources.shufersal import ShufersalAdapter
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ingest")
 
-# מגבלות לריצת ניסיון: בלי זה הריצה הראשונה תנסה למשוך מאות אלפי מוצרים.
-# מעלים אותן בהמשך דרך env ב-workflow.
-MAX_PRICE_FILES = int(os.environ.get("MAX_PRICE_FILES_PER_CHAIN", "2"))
-MAX_ITEMS = int(os.environ.get("MAX_ITEMS_PER_FILE", "300"))
+# מגבלות ריצה: אפשר להרחיב עוד יותר בהמשך דרך env ב-workflow, בלי לגעת בקוד.
+MAX_PRICE_FILES = int(os.environ.get("MAX_PRICE_FILES_PER_CHAIN", "5"))
+MAX_ITEMS = int(os.environ.get("MAX_ITEMS_PER_FILE", "1000"))
+MAX_PROMO_FILES = int(os.environ.get("MAX_PROMO_FILES_PER_CHAIN", "5"))
 
 
 def build_adapter(chain: ChainConfig):
@@ -126,6 +126,43 @@ def run_chain(chain: ChainConfig) -> None:
         db.upsert("prices", price_rows, on_conflict="product_id,store_id")
         log.info("prices: upserted %d rows for store %s", len(price_rows), store_ext)
 
+    # 3) מבצעים - עד עכשיו הפרסר היה קיים אבל לא היה מחובר בפועל
+    promo_files_done = 0
+    for (kind, store_ext), ref in latest.items():
+        if kind != "promos":
+            continue
+        if promo_files_done >= MAX_PROMO_FILES:
+            break
+        promo_files_done += 1
+
+        store_uuid = store_uuid_by_ext.get(store_ext) if store_ext else None
+        if store_uuid is None:
+            log.warning("skipping promo file %s - no store id resolved", ref.label)
+            continue
+
+        payload = adapter.download(ref)
+        promo_items = parse_promo_file(payload)[:MAX_ITEMS]
+
+        promo_rows = []
+        skipped = 0
+        for pr in promo_items:
+            product_id = _find_existing_product(chain.id, pr.chain_item_code)
+            if product_id is None:
+                skipped += 1
+                continue  # מבצע על מוצר שעדיין לא ראינו במחירים - מדלגים, לא ממציאים מוצר
+            promo_rows.append(
+                {
+                    "product_id": product_id,
+                    "store_id": store_uuid,
+                    "description": pr.description,
+                    "promo_price": str(pr.promo_price) if pr.promo_price else None,
+                    "club_required": pr.club_required,
+                }
+            )
+        if promo_rows:
+            db.upsert("promos", promo_rows, on_conflict="product_id,store_id")
+        log.info("promos: upserted %d rows for store %s (skipped %d unmatched)", len(promo_rows), store_ext, skipped)
+
 
 _product_cache: dict[str, str] = {}  # gtin/alias-key -> product uuid, per-run cache
 
@@ -162,6 +199,23 @@ def _resolve_product(chain_id: str, chain_item_code: str, gtin: str | None, name
 
     _product_cache[cache_key] = product_id
     return product_id
+
+
+def _find_existing_product(chain_id: str, chain_item_code: str) -> str | None:
+    """למבצעים: רק מקשרים למוצר שכבר ראינו בקובץ המחירים. לא יוצרים חדש
+    בלי שם אמיתי - זה היה יוצר רשומות-רפאים בטבלת products."""
+    cache_key = f"alias:{chain_id}:{chain_item_code}"
+    if cache_key in _product_cache:
+        return _product_cache[cache_key]
+    if chain_item_code.isdigit() and len(chain_item_code) in (12, 13, 14):
+        gtin_key = f"gtin:{chain_item_code}"
+        if gtin_key in _product_cache:
+            return _product_cache[gtin_key]
+        found = db.select_one("products", {"gtin": chain_item_code})
+        if found:
+            return found["id"]
+    existing = db.select_one("product_aliases", {"chain_id": chain_id, "chain_item_code": chain_item_code})
+    return existing["product_id"] if existing else None
 
 
 def main() -> None:

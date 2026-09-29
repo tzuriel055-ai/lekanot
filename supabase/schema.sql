@@ -70,7 +70,8 @@ create table if not exists promos (
   club_required boolean not null default false,
   valid_from timestamptz,
   valid_until timestamptz,
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique (product_id, store_id)
 );
 
 -- אימות קהילתי במחיר (הפיצ'ר "אמת באתר החנות")
