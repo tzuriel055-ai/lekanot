@@ -22,6 +22,7 @@ HEADERS = {
     "Prefer": "resolution=merge-duplicates,return=representation",
 }
 if not SUPABASE_KEY.startswith("sb_"):
+    # מפתחות ישנים (JWT) נשלחים גם ב-Authorization; מפתחות חדשים (sb_...) לא
     HEADERS["Authorization"] = f"Bearer {SUPABASE_KEY}"
 
 

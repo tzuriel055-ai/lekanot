@@ -2,9 +2,10 @@
 פרסר גנרי לקבצי ה-XML של חוק שקיפות המחירים.
 
 התקנות מגדירות מבנה קבוע (מסמך "פרסום נתוני מחירים לצרכן"): קובץ חנויות,
-קובץ פריטים/מחירים וקובץ מבצעים, כל אחד ב-XML, לרוב דחוס ב-gzip.
+קובץ פריטים/מחירים וקובץ מבצעים, כל אחד ב-XML. חלק מהרשתות דוחסות ב-gzip
+וחלקן (רמי לוי, בפועל) ב-zip רגיל - הפונקציה decompress מטפלת בשניהם.
 השמות המדויקים של התגיות (tags) משתנים מעט בין רשת לרשת (יש כמה "דיאלקטים"
-נפוצים) — לכן הפונקציות כאן מחפשות כמה שמות אפשריים לכל שדה במקום להניח
+נפוצים) - לכן הפונקציות כאן מחפשות כמה שמות אפשריים לכל שדה במקום להניח
 תג אחד קשיח, כדי שיעבדו על כמה שיותר רשתות בלי שינוי.
 """
 
@@ -12,15 +13,34 @@ from __future__ import annotations
 
 import gzip
 import io
+import zipfile
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from xml.etree import ElementTree as ET
 
 
-def ungzip_if_needed(payload: bytes) -> bytes:
+def decompress(payload: bytes) -> bytes:
     if payload[:2] == b"\x1f\x8b":
         return gzip.decompress(payload)
-    return payload
+    if payload[:2] == b"PK":
+        with zipfile.ZipFile(io.BytesIO(payload)) as zf:
+            names = zf.namelist()
+            if not names:
+                raise ValueError("zip archive is empty")
+            return zf.read(names[0])
+    return payload  # לא דחוס - XML גולמי
+
+
+# שם ישן שנשאר לתאימות לאחור עם קוד שכבר קורא לו
+ungzip_if_needed = decompress
+
+
+def _decode_xml(payload: bytes) -> str:
+    if payload[:2] == b"\xff\xfe":
+        return payload.decode("utf-16-le")
+    if payload[:2] == b"\xfe\xff":
+        return payload.decode("utf-16-be")
+    return payload.decode("utf-8", errors="replace")
 
 
 def _first_text(item: ET.Element, *names: str) -> str | None:
@@ -74,7 +94,7 @@ class ParsedPromoItem:
 
 
 def parse_stores_file(payload: bytes) -> list[ParsedStore]:
-    root = ET.fromstring(ungzip_if_needed(payload))
+    root = ET.fromstring(_decode_xml(decompress(payload)))
     out: list[ParsedStore] = []
     for store in root.iter():
         if store.tag not in ("Store", "STORE"):
@@ -94,7 +114,7 @@ def parse_stores_file(payload: bytes) -> list[ParsedStore]:
 
 
 def parse_price_file(payload: bytes, default_store_id: str | None = None) -> list[ParsedPriceItem]:
-    root = ET.fromstring(ungzip_if_needed(payload))
+    root = ET.fromstring(_decode_xml(decompress(payload)))
     out: list[ParsedPriceItem] = []
     for item in root.iter():
         if item.tag not in ("Item", "ITEM", "Product"):
@@ -103,16 +123,15 @@ def parse_price_file(payload: bytes, default_store_id: str | None = None) -> lis
         name = _first_text(item, "ItemName", "ITEMNAME")
         price = _to_decimal(_first_text(item, "ItemPrice", "ITEMPRICE"))
         if not code or not name or price is None:
-            continue  # רשומה חסרה/פגומה — מדלגים ולא מפילים את כל הריצה
+            continue  # רשומה חסרה/פגומה - מדלגים ולא מפילים את כל הריצה
 
-        gtin_raw = _first_text(item, "ItemCode") if _to_bool(_first_text(item, "ItemType")) else None
         is_weighted = _to_bool(_first_text(item, "bIsWeighted", "BIsWeighted", "ItemIsWeighted"))
 
         out.append(
             ParsedPriceItem(
                 chain_item_code=code,
                 item_name=name,
-                gtin=code if (code and code.isdigit() and len(code) in (12, 13, 14) and not is_weighted) else None,
+                gtin=code if (code.isdigit() and len(code) in (12, 13, 14) and not is_weighted) else None,
                 price=price,
                 unit_of_measure_price=_to_decimal(
                     _first_text(item, "UnitOfMeasurePrice", "UNITOFMEASUREPRICE")
@@ -127,7 +146,7 @@ def parse_price_file(payload: bytes, default_store_id: str | None = None) -> lis
 
 
 def parse_promo_file(payload: bytes) -> list[ParsedPromoItem]:
-    root = ET.fromstring(ungzip_if_needed(payload))
+    root = ET.fromstring(_decode_xml(decompress(payload)))
     out: list[ParsedPromoItem] = []
     for promo in root.iter():
         if promo.tag not in ("Promotion", "PROMOTION", "Sale"):

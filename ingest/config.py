@@ -25,6 +25,7 @@ class ChainConfig:
     portal_type: str
     # לפורטל cerberus: שם המשתמש הספציפי של הרשת באותו פורטל משותף
     portal_username: str = ""
+    active: bool = True
     extra: dict = field(default_factory=dict)
 
 
@@ -36,8 +37,9 @@ CHAINS: list[ChainConfig] = [
     ),
     ChainConfig(
         id="carrefour",
-        display_name="קרפור (יינות ביתן לשעבר)",
+        display_name="קרפור (יינות ביתן לשעבר) - מושבת זמנית",
         portal_type="carrefour_direct",
+        active=False,  # הפורטל שלהם דורש אינטראקציה, לא רק href סטטי - עוד לא פתרנו
     ),
     ChainConfig(
         id="rami-levy",

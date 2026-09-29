@@ -167,6 +167,9 @@ def _resolve_product(chain_id: str, chain_item_code: str, gtin: str | None, name
 def main() -> None:
     failures = []
     for chain in CHAINS:
+        if not chain.active:
+            log.info("skipping %s - disabled in config", chain.id)
+            continue
         if not chain.portal_username and chain.portal_type == "cerberus":
             log.warning("skipping %s - no portal_username configured", chain.id)
             continue
