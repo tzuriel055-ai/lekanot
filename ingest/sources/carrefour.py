@@ -1,7 +1,10 @@
 """
-אדפטר לפורטל השקיפות העצמאי של קרפור ישראל (מבנה דומה לזה של שופרסל —
-פרסום פתוח, בלי login). כמו בשאר האדפטרים: כתוב מתוך ההבנה המתועדת של
-מבנה הפורסום הכללי, ולא נבדק מול שרת אמיתי מתוך ה-sandbox.
+אדפטר לפורטל השקיפות העצמאי של קרפור ישראל.
+
+מושבת כרגע (config.py -> active=False): בדיקה ישירה של האתר הראתה שהוא
+בנוי כך שרשימת הקבצים נטענת דרך JavaScript/ווידג'ט דפדוף, לא כקישורי
+href סטטיים בתוך ה-HTML הראשוני - אז הגרסה הפשוטה הזו לא תמצא קבצים.
+נשאר כאן כשלד למימוש עתידי, לא נמחק, כדי לא לאבד את המבנה כשנחזור לזה.
 """
 
 from __future__ import annotations
@@ -12,9 +15,24 @@ from typing import Iterable
 import requests
 
 from .base import FileRef
-from .shufersal import _classify, _extract_store_id  # אותה לוגיקת סיווג קבצים
 
 PORTAL_BASE = "https://prices.carrefour.co.il"
+
+
+def _classify(fname: str) -> str | None:
+    lower = fname.lower()
+    if "storesfull" in lower or lower.startswith("stores"):
+        return "stores"
+    if "promofull" in lower or lower.startswith("promo"):
+        return "promos"
+    if "pricefull" in lower or lower.startswith("price"):
+        return "prices"
+    return None
+
+
+def _extract_store_id(fname: str) -> str | None:
+    m = re.search(r"-(\d{3,4})-\d{6,}", fname)
+    return m.group(1) if m else None
 
 
 class CarrefourAdapter:
