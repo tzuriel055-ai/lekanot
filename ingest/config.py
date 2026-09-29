@@ -51,7 +51,7 @@ CHAINS: list[ChainConfig] = [
         id="victory",
         display_name="ויקטורי",
         portal_type="cerberus",
-        portal_username="Victory",
+        portal_username="victory",
     ),
     ChainConfig(
         id="osherad",
