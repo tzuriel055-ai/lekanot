@@ -58,6 +58,23 @@ def select_many(table: str, select: str = "*", limit: int = 100, **filters: str)
     return resp.json()
 
 
+def update(table: str, filters: dict[str, str], values: dict[str, Any]) -> list[dict]:
+    """עדכון שורות קיימות בלבד (PATCH), לא INSERT. משתמשים בזה כשאנחנו
+    בטוחים שהשורה כבר קיימת - נמנע מבעיית NOT NULL שקורית ב-upsert כשלא
+    כל העמודות החובה נשלחות."""
+    params = {k: f"eq.{v}" for k, v in filters.items()}
+    resp = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/{table}",
+        params=params,
+        headers=HEADERS,
+        json=values,
+        timeout=30,
+    )
+    if not resp.ok:
+        raise RuntimeError(f"Supabase update on {table} failed ({resp.status_code}): {resp.text[:500]}")
+    return resp.json()
+
+
 def upload_image(bucket: str, path: str, content: bytes, content_type: str) -> str:
     """מעלה קובץ ל-Supabase Storage (bucket חייב להיות public, נוצר פעם אחת
     ידנית ב-Dashboard). מחזיר את ה-URL הציבורי הקבוע של הקובץ."""

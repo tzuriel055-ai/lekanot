@@ -75,7 +75,7 @@ def main() -> None:
         content_type = img_resp.headers.get("Content-Type", "image/jpeg")
         ext = "png" if "png" in content_type else "jpg"
         stored_url = db.upload_image(BUCKET, f"{gtin}.{ext}", img_resp.content, content_type)
-        db.upsert("products", [{"gtin": gtin, "image_url": stored_url}], on_conflict="gtin")
+        db.update("products", {"gtin": gtin}, {"image_url": stored_url})
         found += 1
         log.info("image saved for gtin %s", gtin)
         time.sleep(0.3)  # שימוש הוגן מול השרת החיצוני, לא מציפים אותו
