@@ -48,3 +48,30 @@ def select_one(table: str, filters: dict[str, str]) -> dict | None:
     resp.raise_for_status()
     rows = resp.json()
     return rows[0] if rows else None
+
+
+def select_many(table: str, select: str = "*", limit: int = 100, **filters: str) -> list[dict]:
+    params = {"select": select, "limit": str(limit)}
+    params.update(filters)
+    resp = requests.get(f"{SUPABASE_URL}/rest/v1/{table}", params=params, headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def upload_image(bucket: str, path: str, content: bytes, content_type: str) -> str:
+    """מעלה קובץ ל-Supabase Storage (bucket חייב להיות public, נוצר פעם אחת
+    ידנית ב-Dashboard). מחזיר את ה-URL הציבורי הקבוע של הקובץ."""
+    resp = requests.post(
+        f"{SUPABASE_URL}/storage/v1/object/{bucket}/{path}",
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": content_type,
+            "x-upsert": "true",  # דורס אם כבר קיים, כדי שריצה חוזרת לא תיכשל
+        },
+        data=content,
+        timeout=60,
+    )
+    if not resp.ok:
+        raise RuntimeError(f"Supabase storage upload failed ({resp.status_code}): {resp.text[:300]}")
+    return f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}"
