@@ -29,6 +29,10 @@ MAX_PRODUCTS = int(os.environ.get("MAX_IMAGES_PER_RUN", "5000"))
 _UA = "lekanot-ingest/1.0 (+https://github.com/tzuriel055-ai/lekanot)"
 
 
+class RateLimited(Exception):
+    pass
+
+
 def fetch_off_image_url(gtin: str) -> str | None:
     try:
         resp = requests.get(
@@ -40,6 +44,8 @@ def fetch_off_image_url(gtin: str) -> str | None:
     except requests.RequestException as exc:
         log.warning("OFF request failed for %s: %s", gtin, exc)
         return None
+    if resp.status_code == 429:
+        raise RateLimited()
     if not resp.ok:
         return None
     data = resp.json()
@@ -60,27 +66,38 @@ def main() -> None:
     log.info("checking %d products without an image", len(products))
 
     found = 0
-    for p in products:
+    rate_limit_hits = 0
+    for i, p in enumerate(products):
         gtin = p["gtin"]
-        image_url = fetch_off_image_url(gtin)
-        if not image_url:
-            continue
         try:
-            img_resp = requests.get(image_url, headers={"User-Agent": _UA}, timeout=30)
-            img_resp.raise_for_status()
-        except requests.RequestException as exc:
-            log.warning("failed downloading image for %s: %s", gtin, exc)
-            continue
+            image_url = fetch_off_image_url(gtin)
+        except RateLimited:
+            rate_limit_hits += 1
+            log.warning("rate limited by Open Food Facts, backing off 10s (gtin %s)", gtin)
+            time.sleep(10)
+            continue  # מדלגים על המוצר הזה הפעם, לא נתקעים - יינסה שוב בריצה הבאה
 
-        content_type = img_resp.headers.get("Content-Type", "image/jpeg")
-        ext = "png" if "png" in content_type else "jpg"
-        stored_url = db.upload_image(BUCKET, f"{gtin}.{ext}", img_resp.content, content_type)
-        db.update("products", {"gtin": gtin}, {"image_url": stored_url})
-        found += 1
-        log.info("image saved for gtin %s", gtin)
-        time.sleep(0.3)  # שימוש הוגן מול השרת החיצוני, לא מציפים אותו
+        if image_url:
+            try:
+                img_resp = requests.get(image_url, headers={"User-Agent": _UA}, timeout=30)
+                img_resp.raise_for_status()
+                content_type = img_resp.headers.get("Content-Type", "image/jpeg")
+                ext = "png" if "png" in content_type else "jpg"
+                stored_url = db.upload_image(BUCKET, f"{gtin}.{ext}", img_resp.content, content_type)
+                db.update("products", {"gtin": gtin}, {"image_url": stored_url})
+                found += 1
+                log.info("image saved for gtin %s", gtin)
+            except requests.RequestException as exc:
+                log.warning("failed downloading image for %s: %s", gtin, exc)
 
-    log.info("done: %d/%d products got a real image this run", found, len(products))
+        # תמיד ממתינים, גם אחרי "לא נמצא" - זה בדיוק הבאג שהיה קודם: בלי
+        # ההשהיה הזו כאן, רוב הבקשות (שהן "לא נמצא") ירו בלי שום עצירה
+        # וגרמו לחסימה כמעט מיד.
+        time.sleep(0.4)
+        if (i + 1) % 200 == 0:
+            log.info("progress: %d/%d checked, %d found, %d rate-limit hits", i + 1, len(products), found, rate_limit_hits)
+
+    log.info("done: %d/%d products got a real image this run (%d rate-limit hits)", found, len(products), rate_limit_hits)
 
 
 if __name__ == "__main__":
