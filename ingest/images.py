@@ -25,7 +25,7 @@ log = logging.getLogger("images")
 
 OFF_API = "https://world.openfoodfacts.org/api/v2/product"
 BUCKET = "product-images"
-MAX_PRODUCTS = int(os.environ.get("MAX_IMAGES_PER_RUN", "300"))
+MAX_PRODUCTS = int(os.environ.get("MAX_IMAGES_PER_RUN", "5000"))
 _UA = "lekanot-ingest/1.0 (+https://github.com/tzuriel055-ai/lekanot)"
 
 
