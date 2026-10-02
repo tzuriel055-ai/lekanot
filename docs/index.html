@@ -9,16 +9,17 @@
 <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg-0:#0a0d12;
-    --bg-1:#11161f;
-    --glass:rgba(255,255,255,0.055);
-    --glass-strong:rgba(255,255,255,0.10);
-    --glass-border:rgba(255,255,255,0.14);
+    --bg-0:#07090d;
+    --bg-1:#0f141c;
+    --glass:rgba(255,255,255,0.05);
+    --glass-strong:rgba(255,255,255,0.11);
+    --glass-border:rgba(255,255,255,0.13);
     --ink:#eef1f6;
-    --ink-dim:#9aa4b2;
+    --ink-dim:#97a1b0;
     --accent:#2fd6c4;
     --accent-ink:#04211e;
     --warn:#ffb37a;
+    --danger:#ff8a8a;
     --radius-lg:32px;
     --radius-md:22px;
     --radius-sm:16px;
@@ -30,108 +31,99 @@
     font-family:'Heebo',sans-serif;
     color:var(--ink);
     background:
-      radial-gradient(1100px 700px at 15% -10%, #1c3a3a55, transparent 60%),
-      radial-gradient(900px 600px at 110% 10%, #2a2360aa, transparent 55%),
+      radial-gradient(1100px 700px at 15% -10%, #1c3a3a4d, transparent 60%),
+      radial-gradient(900px 600px at 110% 10%, #2a236099, transparent 55%),
       linear-gradient(180deg, var(--bg-0), var(--bg-1) 60%, var(--bg-0));
     min-height:100%;
     padding-top:env(safe-area-inset-top,0px);
     padding-bottom:env(safe-area-inset-bottom,0px);
   }
   h1,h2,h3{font-family:'Frank Ruhl Libre',serif; font-weight:700; margin:0;}
-  .wrap{max-width:1080px;margin:0 auto;padding:20px 18px 140px;}
+  .wrap{max-width:1080px;margin:0 auto;padding:20px 18px 150px;}
+  button{font-family:inherit;}
 
-  /* --- בועה: אלמנט הבסיס לכל דבר בממשק --- */
   .bubble{
     background:var(--glass);
     border:1px solid var(--glass-border);
-    backdrop-filter:blur(22px) saturate(140%);
-    -webkit-backdrop-filter:blur(22px) saturate(140%);
+    backdrop-filter:blur(24px) saturate(150%);
+    -webkit-backdrop-filter:blur(24px) saturate(150%);
     border-radius:var(--radius-lg);
-    box-shadow:0 8px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08);
+    box-shadow:0 10px 34px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.07);
   }
 
-  header.top{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px 22px;margin-bottom:18px;}
+  header.top{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 20px;margin-bottom:16px;}
   header.top .brand{display:flex;align-items:baseline;gap:10px;}
-  header.top .brand h1{font-size:22px;letter-spacing:0.2px;}
+  header.top .brand h1{font-size:21px;}
   header.top .brand span{color:var(--ink-dim);font-size:13px;}
+  header.top .icon-btn{
+    width:40px;height:40px;border-radius:50%;display:grid;place-items:center;
+    background:var(--glass-strong);border:1px solid var(--glass-border);cursor:pointer;font-size:17px;
+  }
 
-  .search-bubble{padding:6px 8px;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+  .search-bubble{padding:6px 8px;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
   .search-bubble input{
     flex:1;background:transparent;border:none;outline:none;color:var(--ink);
     font-family:'Heebo';font-size:16px;padding:12px 14px;
   }
   .search-bubble input::placeholder{color:var(--ink-dim);}
-  .search-bubble button.mic, .search-bubble .icon{
-    width:40px;height:40px;border-radius:50%;display:grid;place-items:center;
-    background:var(--glass-strong);border:1px solid var(--glass-border);color:var(--ink-dim);
-  }
+  .search-bubble .icon{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--ink-dim);}
 
   .chips{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 18px;scrollbar-width:none;}
   .chips::-webkit-scrollbar{display:none;}
   .chip{
     flex:0 0 auto;padding:10px 18px;border-radius:999px;font-size:14px;white-space:nowrap;
     background:var(--glass);border:1px solid var(--glass-border);color:var(--ink-dim);cursor:pointer;
-    transition:all .15s ease;
   }
   .chip.active{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:500;}
 
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;}
-  .card{
-    padding:14px;display:flex;flex-direction:column;gap:8px;cursor:pointer;
-    border-radius:var(--radius-md);transition:transform .15s ease;
-  }
-  .card:active{transform:scale(0.97);}
+  .card{padding:14px;display:flex;flex-direction:column;gap:8px;cursor:pointer;border-radius:var(--radius-md);}
   .card .thumb{
-    aspect-ratio:1/1;border-radius:var(--radius-sm);
-    display:grid;place-items:center;font-size:26px;font-weight:700;color:var(--ink-dim);
+    aspect-ratio:1/1;border-radius:var(--radius-sm);display:grid;place-items:center;font-size:34px;
     background:linear-gradient(145deg, rgba(255,255,255,0.09), rgba(255,255,255,0.02));
-    border:1px solid var(--glass-border);
+    border:1px solid var(--glass-border);overflow:hidden;
   }
-  .card .thumb img{width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm);}
+  .card .thumb img{width:100%;height:100%;object-fit:cover;}
   .card .name{font-size:14px;line-height:1.35;min-height:38px;}
   .card .price-row{display:flex;align-items:center;justify-content:space-between;}
-  .card .price{font-weight:700;color:var(--accent);}
+  .card .price{font-weight:700;color:var(--accent);font-size:13px;}
   .card .add-btn{
     width:34px;height:34px;border-radius:50%;border:1px solid var(--glass-border);
     background:var(--glass-strong);color:var(--ink);font-size:18px;display:grid;place-items:center;
   }
-
   .empty, .loading{color:var(--ink-dim);text-align:center;padding:60px 10px;font-size:15px;}
 
-  /* --- סרגל תחתון בועתי מרחף --- */
-  .dock{
-    position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);
-    width:min(560px, calc(100% - 32px));padding:12px 18px;display:flex;align-items:center;gap:14px;
-    z-index:40;
+  /* ---- ניווט תחתון בועתי עם כמה כפתורים ---- */
+  .navbar{
+    position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:6px;padding:8px;z-index:40;
   }
-  .dock .cart-count{
-    width:38px;height:38px;border-radius:50%;background:var(--accent);color:var(--accent-ink);
-    display:grid;place-items:center;font-weight:700;flex:0 0 auto;
+  .navbar button{
+    position:relative;background:transparent;border:none;color:var(--ink-dim);
+    width:56px;height:56px;border-radius:50%;display:grid;place-items:center;font-size:21px;cursor:pointer;
   }
-  .dock .label{flex:1;}
-  .dock .label b{display:block;font-size:14px;}
-  .dock .label small{color:var(--ink-dim);font-size:12px;}
-  .dock button.cta{
-    background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;
-    padding:12px 20px;font-weight:700;font-family:'Heebo';font-size:14px;cursor:pointer;
+  .navbar button.active{background:var(--accent);color:var(--accent-ink);}
+  .navbar .badge{
+    position:absolute;top:2px;left:2px;background:var(--danger);color:#2a0a0a;font-size:10px;font-weight:700;
+    border-radius:999px;min-width:16px;height:16px;display:grid;place-items:center;padding:0 3px;
   }
 
-  /* --- מסך רשימה/תוצאות (bottom sheet) --- */
-  .sheet-backdrop{
-    position:fixed;inset:0;background:rgba(4,6,10,0.55);backdrop-filter:blur(4px);
-    z-index:50;display:none;
-  }
+  .sheet-backdrop{position:fixed;inset:0;background:rgba(4,6,10,0.55);backdrop-filter:blur(4px);z-index:50;display:none;}
   .sheet-backdrop.open{display:block;}
   .sheet{
-    position:fixed;left:0;right:0;bottom:0;z-index:51;
-    max-height:88vh;overflow-y:auto;
-    border-radius:34px 34px 0 0;
-    padding:20px 18px calc(28px + env(safe-area-inset-bottom,0px));
+    position:fixed;left:0;right:0;bottom:0;z-index:51;max-height:88vh;overflow-y:auto;
+    border-radius:34px 34px 0 0;padding:20px 18px calc(28px + env(safe-area-inset-bottom,0px));
     transform:translateY(100%);transition:transform .28s cubic-bezier(.2,.9,.25,1);
   }
   .sheet.open{transform:translateY(0);}
   .sheet .handle{width:44px;height:5px;border-radius:3px;background:var(--glass-border);margin:0 auto 16px;}
   .sheet h2{font-size:20px;margin-bottom:14px;}
+  .sheet .subtabs{display:flex;gap:8px;margin-bottom:16px;}
+  .sheet .subtabs button{
+    flex:1;padding:9px;border-radius:999px;border:1px solid var(--glass-border);background:var(--glass);
+    color:var(--ink-dim);font-size:13px;cursor:pointer;
+  }
+  .sheet .subtabs button.active{background:var(--accent);color:var(--accent-ink);border-color:transparent;}
 
   .line-item{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,0.06);}
   .line-item .name{flex:1;font-size:14px;}
@@ -139,7 +131,17 @@
   .line-item .qty button{width:26px;height:26px;border-radius:50%;border:1px solid var(--glass-border);background:var(--glass-strong);color:var(--ink);}
   .line-item .kg-input{width:56px;background:var(--glass-strong);border:1px solid var(--glass-border);border-radius:8px;color:var(--ink);text-align:center;padding:4px;}
 
-  .split-control{display:flex;align-items:center;gap:12px;margin:14px 0 18px;}
+  .row-actions{display:flex;gap:10px;margin:14px 0;}
+  .btn{
+    flex:1;padding:12px;border-radius:999px;border:1px solid var(--glass-border);background:var(--glass-strong);
+    color:var(--ink);font-size:13px;cursor:pointer;text-align:center;
+  }
+  .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:700;}
+
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:10px 2px;font-size:13px;color:var(--ink-dim);}
+  .toggle-row input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);}
+
+  .split-control{display:flex;align-items:center;gap:12px;margin:14px 0 6px;}
   .split-control input[type=range]{flex:1;accent-color:var(--accent);}
 
   .plan{border-radius:var(--radius-md);padding:16px;margin-bottom:12px;}
@@ -149,12 +151,37 @@
   .plan .plan-total{font-size:20px;font-weight:700;color:var(--accent);font-family:'Frank Ruhl Libre';}
   .plan .stores{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
   .plan .store-tag{font-size:12px;background:var(--glass-strong);border:1px solid var(--glass-border);border-radius:999px;padding:4px 10px;color:var(--ink-dim);}
+  .plan .store-tag button{background:none;border:none;color:var(--ink-dim);margin-right:4px;cursor:pointer;font-size:12px;}
   .plan .missing{color:var(--warn);font-size:12px;margin-top:8px;}
 
+  .saved-item{padding:14px;border-radius:var(--radius-md);margin-bottom:10px;}
+  .saved-item .row{display:flex;justify-content:space-between;align-items:center;}
+  .saved-item .meta{color:var(--ink-dim);font-size:12px;margin-top:4px;}
+  .saved-item .actions{display:flex;gap:8px;margin-top:10px;}
+  .saved-item .actions button{flex:1;}
+
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:13px;color:var(--ink-dim);margin-bottom:6px;}
+  .field input[type=text], .field select{
+    width:100%;background:var(--glass-strong);border:1px solid var(--glass-border);border-radius:14px;
+    color:var(--ink);padding:12px 14px;font-size:14px;font-family:inherit;
+  }
+  .field .hint{font-size:11px;color:var(--ink-dim);margin-top:6px;line-height:1.5;}
+  .delivery-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;}
+  .delivery-row span{font-size:13px;}
+  .delivery-row input{width:80px;background:var(--glass-strong);border:1px solid var(--glass-border);border-radius:10px;color:var(--ink);padding:6px 10px;text-align:center;}
+
   .disclaimer{font-size:11px;color:var(--ink-dim);text-align:center;margin-top:18px;line-height:1.6;}
+  .confirm-row{display:flex;gap:6px;align-items:center;}
+  .confirm-row button{
+    width:28px;height:28px;border-radius:50%;border:1px solid var(--glass-border);background:var(--glass-strong);
+    color:var(--ink-dim);font-size:13px;cursor:pointer;
+  }
+  .confirm-row button.yes:hover{color:var(--accent);}
+  .confirm-row button.no:hover{color:var(--danger);}
 
   @media (max-width:520px){
-    .wrap{padding:14px 12px 150px;}
+    .wrap{padding:14px 12px 160px;}
     header.top .brand h1{font-size:19px;}
   }
 </style>
@@ -163,11 +190,8 @@
 
 <div class="wrap">
   <header class="top bubble">
-    <div class="brand">
-      <h1>בקטנה</h1>
-      <span>פשוט לקנות</span>
-    </div>
-    <div class="icon" id="locBtn" title="מיקום">📍</div>
+    <div class="brand"><h1>בקטנה</h1><span>פשוט לקנות</span></div>
+    <div class="icon-btn" id="settingsBtn" title="הגדרות">⚙️</div>
   </header>
 
   <div class="search-bubble bubble">
@@ -176,26 +200,20 @@
   </div>
 
   <div class="chips" id="categoryChips"></div>
-
   <div id="grid" class="grid"></div>
 </div>
 
-<div class="dock bubble" id="dock" style="display:none;">
-  <div class="cart-count" id="cartCount">0</div>
-  <div class="label"><b>הרשימה שלי</b><small id="dockSub">לחצו כדי להשוות מחירים</small></div>
-  <button class="cta" id="openCartBtn">להשוואה</button>
+<div class="navbar bubble">
+  <button id="navHome" class="active" title="עיון">🏠</button>
+  <button id="navCart" title="הרשימה שלי">🛒<span class="badge" id="cartBadge" style="display:none;">0</span></button>
+  <button id="navSaved" title="רשימות שמורות">📑</button>
 </div>
 
 <div class="sheet-backdrop" id="backdrop"></div>
-<div class="sheet bubble" id="sheet">
-  <div class="handle"></div>
-  <div id="sheetContent"></div>
-</div>
+<div class="sheet bubble" id="sheet"><div class="handle"></div><div id="sheetContent"></div></div>
 
 <script>
 /* ======================= הגדרות חיבור ל-Supabase ======================= */
-/* אלה לא סודות - מפתח ה-anon מיועד לחשיפה בדפדפן, ה-RLS בסכימה הוא
-   שמגן על הנתונים מפני כתיבה. */
 const SUPABASE_URL = "https://zkctsixcgjoymvcbiacm.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_0M3Fl16g6zDg9XQr319Ldw_fNUSEZ4b";
 
@@ -208,14 +226,55 @@ async function sb(path, params = {}) {
   return res.json();
 }
 
-/* ======================= state ======================= */
-const state = {
-  products: [],       // תוצאת חיפוש/עיון נוכחית
-  cart: new Map(),     // product_id -> {product, qty}
-  maxStores: 2,
+async function sbInsert(path, body) {
+  const headers = { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" };
+  if (!SUPABASE_ANON_KEY.startsWith("sb_")) headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`Supabase insert error ${res.status}: ${await res.text()}`);
+  return res.ok;
+}
+
+/* ======================= אחסון מקומי - רשימות שמורות/היסטוריה/הגדרות =======================
+   זה אתר רגיל שרץ ב-Netlify, לא Artifact בתוך קלוד - אז localStorage כאן
+   תקין ומתאים, לא רק זמין בזמן הביקור. */
+const LS_KEYS = { saved: "lekanot:saved-lists", history: "lekanot:history", settings: "lekanot:settings" };
+
+function lsGet(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+}
+function lsSet(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
+
+const CATEGORY_OPTIONS = ["פסח", "פורים", "שבת", "ערב", "בר/בת מצווה", "מותאם אישית"];
+const CATEGORY_ICONS = {
+  "מוצרי חלב": "🥛", "פירות וירקות": "🥦", "בשר ודגים": "🍖",
+  "ניקיון": "🧴", "בייבי": "🍼", "משקאות": "🥤", "default": "🛍️",
 };
 
-/* ======================= טעינת נתונים אמיתיים ======================= */
+/* ======================= state ======================= */
+const state = {
+  products: [],
+  cart: new Map(),       // product_id -> {product, qty}
+  maxStores: 2,
+  includeDelivery: false,
+  settings: lsGet(LS_KEYS.settings, { location: "", transport: "car", delivery: {} }),
+  activeNav: "home",
+};
+
+/* ======================= אייקון placeholder לפי קטגוריה =======================
+   חשוב: זה *תמיד* אייקון מצויר, לא תמונה מזויפת שמתיימרת להיות המוצר
+   האמיתי. ברגע שיש image_url אמיתי מה-DB, הוא תמיד מחליף את זה. */
+function guessIcon(name) {
+  const n = name || "";
+  if (/חלב|גבינה|יוגורט|שמנת/.test(n)) return "🥛";
+  if (/עגבני|מלפפון|תפוח|ירק|פרי|בננה|פטר/.test(n)) return "🥦";
+  if (/בשר|עוף|דג|נקניק|שניצל/.test(n)) return "🍖";
+  if (/ניקוי|אקונומיקה|סבון|מגבון/.test(n)) return "🧴";
+  if (/בייבי|חיתול|תינוק/.test(n)) return "🍼";
+  if (/קולה|מיץ|משקה|שתיה|בירה/.test(n)) return "🥤";
+  return CATEGORY_ICONS.default;
+}
+
+/* ======================= טעינת/חיפוש מוצרים ======================= */
 async function loadInitial() {
   const grid = document.getElementById('grid');
   grid.innerHTML = `<div class="loading">טוען מוצרים אמיתיים מ-Supabase…</div>`;
@@ -226,7 +285,7 @@ async function loadInitial() {
   } catch (e) {
     grid.innerHTML = `<div class="empty">
       עדיין אין חיבור לנתונים (${e.message}).<br>
-      עדכנו את SUPABASE_URL / SUPABASE_ANON_KEY למעלה בקובץ, אחרי שה-ingest ירוץ פעם אחת.
+      עדכנו את SUPABASE_URL / SUPABASE_ANON_KEY למעלה בקובץ.
     </div>`;
   }
 }
@@ -239,26 +298,22 @@ async function searchProducts(q) {
 }
 
 async function fetchPricesForProduct(productId) {
-  // כל המחירים הנוכחיים למוצר הזה, בכל הסניפים, כולל שם הרשת והסניף
   return sb('prices', {
-    select: 'price,unit_price,store_id,product_id,stores(name,city,chain_id,chains(display_name))',
+    select: 'id,price,unit_price,store_id,product_id,stores(name,city,chain_id,chains(display_name))',
     product_id: `eq.${productId}`,
   });
 }
 
-/* ======================= רינדור ======================= */
+/* ======================= רינדור גריד ======================= */
 function renderGrid(products) {
   const grid = document.getElementById('grid');
-  if (!products.length) {
-    grid.innerHTML = `<div class="empty">לא נמצאו מוצרים תואמים.</div>`;
-    return;
-  }
+  if (!products.length) { grid.innerHTML = `<div class="empty">לא נמצאו מוצרים תואמים.</div>`; return; }
   grid.innerHTML = '';
   for (const p of products) {
     const card = document.createElement('div');
     card.className = 'card bubble';
     card.innerHTML = `
-      <div class="thumb">${p.image_url ? `<img src="${p.image_url}" alt="">` : (p.canonical_name || '?')[0]}</div>
+      <div class="thumb">${p.image_url ? `<img src="${p.image_url}" alt="" loading="lazy">` : guessIcon(p.canonical_name)}</div>
       <div class="name">${p.canonical_name}</div>
       <div class="price-row">
         <span class="price">${p.is_weighted ? 'לפי ק"ג' : ''}</span>
@@ -270,70 +325,90 @@ function renderGrid(products) {
 }
 
 function addToCart(product) {
-  const entry = state.cart.get(product.id) || { product, qty: product.is_weighted ? 1 : 1 };
-  entry.qty = product.is_weighted ? entry.qty : entry.qty + (state.cart.has(product.id) ? 1 : 0) + (state.cart.has(product.id) ? 0 : 1);
-  if (!state.cart.has(product.id)) entry.qty = 1; else entry.qty = state.cart.get(product.id).qty + 1;
-  state.cart.set(product.id, { product, qty: entry.qty });
-  updateDock();
+  const existing = state.cart.get(product.id);
+  state.cart.set(product.id, { product, qty: existing ? existing.qty + 1 : 1 });
+  updateNav();
 }
 
-function updateDock() {
-  const dock = document.getElementById('dock');
-  const count = [...state.cart.values()].reduce((a, e) => a + 1, 0);
-  document.getElementById('cartCount').textContent = count;
-  document.getElementById('dockSub').textContent = `${count} מוצרים ברשימה`;
-  dock.style.display = count ? 'flex' : 'none';
+function updateNav() {
+  const count = state.cart.size;
+  const badge = document.getElementById('cartBadge');
+  badge.style.display = count ? 'grid' : 'none';
+  badge.textContent = count;
 }
 
-/* ======================= מנוע ההשוואה/פיצול (הלב האמיתי) ======================= */
-/*
-  קלט: state.cart (product -> qty), ומחירים אמיתיים שנשלפים per-product.
-  פלט: כמה תוכניות קנייה -
-    1. "הכי נוח"      - חנות אחת שיש בה הכי הרבה מהרשימה, הכי זול ביניהן.
-    2. "הכי זול"      - כל מוצר בנפרד בחנות הכי זולה עבורו (בלי הגבלת מס' חנויות).
-    3. "עד N חנויות"  - הכי זול בכפוף למגבלת חנויות שהמשתמש בחר (סליידר),
-                        ע"י בדיקת כל הקומבינציות של עד N חנויות מתוך מועמדות.
-*/
+/* ======================= ניווט תחתון ======================= */
+const navButtons = { home: document.getElementById('navHome'), cart: document.getElementById('navCart'), saved: document.getElementById('navSaved') };
+function setActiveNav(name) {
+  state.activeNav = name;
+  Object.entries(navButtons).forEach(([k, el]) => el.classList.toggle('active', k === name));
+}
+navButtons.home.onclick = () => { setActiveNav('home'); closeSheet(); };
+navButtons.cart.onclick = () => { setActiveNav('cart'); renderCartSheet(); };
+navButtons.saved.onclick = () => { setActiveNav('saved'); renderSavedSheet('saved'); };
+document.getElementById('settingsBtn').onclick = () => renderSettingsSheet();
+
+/* ======================= sheet helpers ======================= */
+const sheet = document.getElementById('sheet');
+const backdrop = document.getElementById('backdrop');
+function openSheet(html) { document.getElementById('sheetContent').innerHTML = html; sheet.classList.add('open'); backdrop.classList.add('open'); }
+function closeSheet() { sheet.classList.remove('open'); backdrop.classList.remove('open'); setActiveNav('home'); }
+backdrop.onclick = closeSheet;
+
+/* ======================= מנוע ההשוואה/פיצול ======================= */
 async function computePlans() {
   const items = [...state.cart.values()];
-  const priceMap = new Map(); // product_id -> [{storeId, storeName, chainName, price, unitPrice}]
+  const priceMap = new Map();
   for (const { product } of items) {
     const rows = await fetchPricesForProduct(product.id);
     priceMap.set(product.id, rows.map(r => ({
-      storeId: r.store_id,
-      storeName: r.stores?.name || '(סניף)',
-      chainName: r.stores?.chains?.display_name || '',
-      price: Number(r.price),
-      unitPrice: r.unit_price ? Number(r.unit_price) : null,
+      priceId: r.id, storeId: r.store_id, storeName: r.stores?.name || '(סניף)',
+      chainId: r.stores?.chain_id, chainName: r.stores?.chains?.display_name || '',
+      price: Number(r.price), unitPrice: r.unit_price ? Number(r.unit_price) : null,
     })));
   }
+  const candidateStores = [...new Set([...priceMap.values()].flat().map(r => r.storeId))];
 
-  const candidateStores = [...new Set(
-    [...priceMap.values()].flat().map(r => r.storeId)
-  )];
-
-  function lineCost(entry, storeOffer) {
+  function lineCost(entry, offer) {
     const { product, qty } = entry;
-    if (product.is_weighted && storeOffer.unitPrice) return storeOffer.unitPrice * qty;
-    return storeOffer.price * qty;
+    return (product.is_weighted && offer.unitPrice) ? offer.unitPrice * qty : offer.price * qty;
+  }
+  function deliveryFor(chainId) {
+    if (!state.includeDelivery) return 0;
+    const fee = state.settings.delivery?.[chainId];
+    return fee ? Number(fee) : 0;
   }
 
-  // --- תוכנית: כל מוצר בחנות הזולה ביותר עבורו (ללא הגבלה) ---
+  function planSingleBest() {
+    let best = null;
+    for (const storeId of candidateStores) {
+      let total = 0; const missing = []; let storeName = '', chainName = '', chainId = null;
+      for (const entry of items) {
+        const offer = (priceMap.get(entry.product.id) || []).find(o => o.storeId === storeId);
+        if (!offer) { missing.push(entry.product.canonical_name); continue; }
+        total += lineCost(entry, offer); storeName = offer.storeName; chainName = offer.chainName; chainId = offer.chainId;
+      }
+      if (missing.length) continue;
+      total += deliveryFor(chainId);
+      if (!best || total < best.total) best = { title: 'הכי נוח — חנות אחת', total, storesUsed: [`${chainName} · ${storeName}`], missing: [] };
+    }
+    return best;
+  }
+
   function planUnlimited() {
-    let total = 0; const storesUsed = new Set(); const missing = [];
+    let total = 0; const storesUsed = new Map(); const missing = [];
     for (const entry of items) {
       const offers = priceMap.get(entry.product.id) || [];
       if (!offers.length) { missing.push(entry.product.canonical_name); continue; }
       const best = offers.reduce((a, b) => lineCost(entry, b) < lineCost(entry, a) ? b : a);
       total += lineCost(entry, best);
-      storesUsed.add(`${best.chainName} · ${best.storeName}`);
+      storesUsed.set(best.chainId, `${best.chainName} · ${best.storeName}`);
     }
-    return { title: 'הכי זול — פיצול מקסימלי', total, storesUsed: [...storesUsed], missing, storeCount: storesUsed.size };
+    for (const chainId of storesUsed.keys()) total += deliveryFor(chainId);
+    return { title: 'הכי זול — פיצול מקסימלי', total, storesUsed: [...storesUsed.values()], missing, storeCount: storesUsed.size };
   }
 
-  // --- תוכנית: עד N חנויות, בודקים קומבינציות של מועמדות מתוך top-K ---
   function planLimited(n) {
-    // מדרגים חנויות לפי כמה פריטים הן מכסות ובאיזה עלות כוללת אם הכל שם
     const scored = candidateStores.map(storeId => {
       let total = 0, covered = 0;
       for (const entry of items) {
@@ -342,58 +417,60 @@ async function computePlans() {
       }
       return { storeId, total, covered };
     }).sort((a, b) => b.covered - a.covered || a.total - b.total);
-
-    const K = Math.min(10, scored.length);
-    const top = scored.slice(0, K);
+    const top = scored.slice(0, Math.min(10, scored.length));
 
     function combos(arr, size) {
       if (size === 0) return [[]];
       if (arr.length < size) return [];
       const [first, ...rest] = arr;
-      return [
-        ...combos(rest, size - 1).map(c => [first, ...c]),
-        ...combos(rest, size),
-      ];
+      return [...combos(rest, size - 1).map(c => [first, ...c]), ...combos(rest, size)];
     }
-
     let best = null;
     for (let size = 1; size <= Math.min(n, top.length); size++) {
       for (const combo of combos(top, size)) {
         const storeIds = combo.map(c => c.storeId);
-        let total = 0; const missing = []; const usedStores = new Set();
+        let total = 0; const missing = []; const usedChains = new Map();
         for (const entry of items) {
           const offers = (priceMap.get(entry.product.id) || []).filter(o => storeIds.includes(o.storeId));
           if (!offers.length) { missing.push(entry.product.canonical_name); continue; }
           const b = offers.reduce((a, c) => lineCost(entry, c) < lineCost(entry, a) ? c : a);
           total += lineCost(entry, b);
-          usedStores.add(`${b.chainName} · ${b.storeName}`);
+          usedChains.set(b.chainId, `${b.chainName} · ${b.storeName}`);
         }
-        if (missing.length) continue; // בתוכנית מוגבלת - רק אם היא מכסה הכל
-        if (!best || total < best.total) best = { title: `עד ${n} חנויות`, total, storesUsed: [...usedStores], missing: [], storeCount: usedStores.size };
+        if (missing.length) continue;
+        for (const chainId of usedChains.keys()) total += deliveryFor(chainId);
+        if (!best || total < best.total) best = { title: `עד ${n} חנויות`, total, storesUsed: [...usedChains.values()], missing: [] };
       }
     }
-    return best || { title: `עד ${n} חנויות`, total: null, storesUsed: [], missing: ['אין קומבינציה שמכסה את כל הרשימה במגבלה הזו'], storeCount: 0 };
+    return best || { title: `עד ${n} חנויות`, total: null, storesUsed: [], missing: ['אין קומבינציה שמכסה את כל הרשימה במגבלה הזו'] };
   }
 
   const plans = [planUnlimited()];
+  const single = planSingleBest();
+  if (single) plans.push(single);
   if (state.maxStores >= 1) plans.push(planLimited(state.maxStores));
-  return plans.filter(p => p.total !== null || p.missing.length);
+  return { plans: plans.filter(p => p.total !== null || p.missing.length), priceMap };
 }
 
-/* ======================= sheet / UI wiring ======================= */
-const sheet = document.getElementById('sheet');
-const backdrop = document.getElementById('backdrop');
-
-function openSheet(html) {
-  document.getElementById('sheetContent').innerHTML = html;
-  sheet.classList.add('open'); backdrop.classList.add('open');
+/* ======================= עגלה ======================= */
+function cartAsLines() {
+  return [...state.cart.values()].map(({ product, qty }) => ({
+    product_id: product.id, name: product.canonical_name, is_weighted: product.is_weighted, qty,
+  }));
 }
-function closeSheet() { sheet.classList.remove('open'); backdrop.classList.remove('open'); }
-backdrop.onclick = closeSheet;
-
-document.getElementById('openCartBtn').onclick = async () => {
-  renderCartSheet();
-};
+function loadLinesIntoCart(lines) {
+  state.cart.clear();
+  for (const l of lines) {
+    state.cart.set(l.product_id, { product: { id: l.product_id, canonical_name: l.name, is_weighted: l.is_weighted }, qty: l.qty });
+  }
+  updateNav();
+}
+function pushCurrentCartToHistory() {
+  if (!state.cart.size) return;
+  const history = lsGet(LS_KEYS.history, []);
+  history.unshift({ id: `h_${Date.now()}`, savedAt: new Date().toISOString(), items: cartAsLines() });
+  lsSet(LS_KEYS.history, history.slice(0, 20));
+}
 
 function renderCartSheet() {
   const items = [...state.cart.values()];
@@ -402,52 +479,178 @@ function renderCartSheet() {
       <div class="name">${product.canonical_name}</div>
       ${product.is_weighted
         ? `<div class="qty"><input class="kg-input" type="number" min="0.1" step="0.1" value="${qty}" data-id="${product.id}"> ק"ג</div>`
-        : `<div class="qty">
-             <button data-id="${product.id}" data-d="-1">–</button>
-             <span>${qty}</span>
-             <button data-id="${product.id}" data-d="1">+</button>
-           </div>`}
+        : `<div class="qty"><button data-id="${product.id}" data-d="-1">–</button><span>${qty}</span><button data-id="${product.id}" data-d="1">+</button></div>`}
     </div>`).join('');
 
   openSheet(`
     <h2>הרשימה שלי</h2>
     ${rows || '<div class="empty">הרשימה ריקה</div>'}
+    <div class="row-actions">
+      <button class="btn" id="saveListBtn">💾 שמור רשימה</button>
+      <button class="btn" id="copyListBtn">📋 העתק רשימה</button>
+      <button class="btn" id="clearListBtn">🗑️ רשימה חדשה</button>
+    </div>
     <div class="split-control">
       <span>פיצול עד</span>
       <input type="range" min="1" max="4" value="${state.maxStores}" id="splitRange">
       <b id="splitVal">${state.maxStores}</b> חנויות
     </div>
-    <button class="cta" style="width:100%;padding:14px;border-radius:999px;" id="compareBtn">חשב השוואה</button>
+    <div class="toggle-row">
+      <span>לחשב עם עלות משלוח (לפי ההגדרות שלך)</span>
+      <input type="checkbox" id="deliveryToggle" ${state.includeDelivery ? 'checked' : ''}>
+    </div>
+    <button class="btn primary" style="width:100%;padding:14px;margin-top:10px;" id="compareBtn">חשב השוואה</button>
     <div id="plansHost"></div>
     <div class="disclaimer">
       המחירים מבוססים על קובצי השקיפות האחרונים שפורסמו ע"י הרשתות ולא
-      בהכרח זהים במאית השנייה למה שיוצג בקופה. שקילה מחושבת לפי מחיר
-      ליחידת מידה כפי שדווח.
+      בהכרח זהים במאית השנייה למה שיוצג בקופה. ראיתם מחיר שלא תואם בסניף?
+      סמנו ✓/✗ ליד התוצאה אחרי חישוב ההשוואה - זה עוזר לכולם.
     </div>
   `);
 
   sheet.querySelectorAll('.qty button').forEach(b => b.onclick = () => {
     const id = b.dataset.id, d = Number(b.dataset.d);
     const e = state.cart.get(id); e.qty = Math.max(1, e.qty + d);
-    updateDock(); renderCartSheet();
+    if (e.qty <= 0) state.cart.delete(id);
+    updateNav(); renderCartSheet();
   });
   sheet.querySelectorAll('.kg-input').forEach(inp => inp.onchange = () => {
     const e = state.cart.get(inp.dataset.id); e.qty = Math.max(0.1, Number(inp.value));
   });
   document.getElementById('splitRange').oninput = (e) => {
-    state.maxStores = Number(e.target.value);
-    document.getElementById('splitVal').textContent = state.maxStores;
+    state.maxStores = Number(e.target.value); document.getElementById('splitVal').textContent = state.maxStores;
   };
+  document.getElementById('deliveryToggle').onchange = (e) => { state.includeDelivery = e.target.checked; };
+
+  document.getElementById('clearListBtn').onclick = () => {
+    pushCurrentCartToHistory(); state.cart.clear(); updateNav(); renderCartSheet();
+  };
+  document.getElementById('copyListBtn').onclick = async () => {
+    const text = cartAsLines().map(l => `${l.name} — ${l.qty}${l.is_weighted ? ' ק"ג' : ' יח׳'}`).join('\n');
+    try { await navigator.clipboard.writeText(text); alert('הרשימה הועתקה - אפשר להדביק אותה בחיפוש של אפליקציית הרשת'); }
+    catch { alert('לא הצלחתי להעתיק אוטומטית, אבל זו הרשימה:\n\n' + text); }
+  };
+  document.getElementById('saveListBtn').onclick = () => renderSaveListForm();
+
   document.getElementById('compareBtn').onclick = async () => {
     const host = document.getElementById('plansHost');
     host.innerHTML = `<div class="loading">מחשב את הפיצול הזול ביותר…</div>`;
-    const plans = await computePlans();
+    const { plans } = await computePlans();
     host.innerHTML = plans.map((p, i) => `
       <div class="plan bubble ${i === 0 ? 'best' : ''}">
         <div class="plan-head"><b>${p.title}</b>${p.total !== null ? `<span class="plan-total">₪${p.total.toFixed(2)}</span>` : ''}</div>
-        <div class="stores">${p.storesUsed.map(s => `<span class="store-tag">${s}</span>`).join('')}</div>
-        ${p.missing.length ? `<div class="missing">חסר במלאי הזמין: ${p.missing.join(', ')}</div>` : ''}
+        <div class="stores">${(p.storesUsed || []).map(s => `<span class="store-tag">${s}</span>`).join('')}</div>
+        ${p.missing && p.missing.length ? `<div class="missing">חסר במלאי הזמין: ${p.missing.join(', ')}</div>` : ''}
       </div>`).join('');
+  };
+}
+
+function renderSaveListForm() {
+  const optionsHtml = CATEGORY_OPTIONS.map(c => `<option value="${c}">${c}</option>`).join('');
+  openSheet(`
+    <h2>שמירת רשימה</h2>
+    <div class="field"><label>שם הרשימה</label><input type="text" id="listName" placeholder="לדוגמה: קניות לשבת"></div>
+    <div class="field"><label>קטגוריה</label><select id="listCategory">${optionsHtml}</select></div>
+    <button class="btn primary" style="width:100%;padding:14px;" id="confirmSaveBtn">שמור</button>
+  `);
+  document.getElementById('confirmSaveBtn').onclick = () => {
+    const name = document.getElementById('listName').value.trim() || 'רשימה ללא שם';
+    const category = document.getElementById('listCategory').value;
+    const saved = lsGet(LS_KEYS.saved, []);
+    saved.unshift({ id: `s_${Date.now()}`, name, category, savedAt: new Date().toISOString(), items: cartAsLines() });
+    lsSet(LS_KEYS.saved, saved);
+    renderCartSheet();
+  };
+}
+
+/* ======================= רשימות שמורות + היסטוריה ======================= */
+function renderSavedSheet(tab) {
+  const saved = lsGet(LS_KEYS.saved, []);
+  const history = lsGet(LS_KEYS.history, []);
+  const list = tab === 'saved' ? saved : history;
+
+  const itemsHtml = list.length ? list.map(entry => `
+    <div class="saved-item bubble">
+      <div class="row">
+        <b>${entry.name || 'רשימה מההיסטוריה'}</b>
+        <span style="color:var(--ink-dim);font-size:11px;">${new Date(entry.savedAt).toLocaleDateString('he-IL')}</span>
+      </div>
+      ${entry.category ? `<div class="meta">${entry.category}</div>` : ''}
+      <div class="meta">${entry.items.length} מוצרים</div>
+      <div class="actions">
+        <button class="btn" data-load="${entry.id}">טען לרשימה</button>
+        ${tab === 'saved' ? `<button class="btn" data-del="${entry.id}">מחק</button>` : ''}
+      </div>
+    </div>`).join('') : `<div class="empty">${tab === 'saved' ? 'אין עדיין רשימות שמורות' : 'אין היסטוריה עדיין'}</div>`;
+
+  openSheet(`
+    <h2>הרשימות שלי</h2>
+    <div class="subtabs">
+      <button id="tabSaved" class="${tab === 'saved' ? 'active' : ''}">שמורות</button>
+      <button id="tabHistory" class="${tab === 'history' ? 'active' : ''}">היסטוריה</button>
+    </div>
+    ${itemsHtml}
+  `);
+
+  document.getElementById('tabSaved').onclick = () => renderSavedSheet('saved');
+  document.getElementById('tabHistory').onclick = () => renderSavedSheet('history');
+
+  sheet.querySelectorAll('[data-load]').forEach(b => b.onclick = () => {
+    const entry = list.find(e => e.id === b.dataset.load);
+    if (entry) { loadLinesIntoCart(entry.items); setActiveNav('cart'); renderCartSheet(); }
+  });
+  sheet.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+    const next = saved.filter(e => e.id !== b.dataset.del);
+    lsSet(LS_KEYS.saved, next);
+    renderSavedSheet('saved');
+  });
+}
+
+/* ======================= הגדרות (מיקום / תחבורה / משלוח) ======================= */
+async function renderSettingsSheet() {
+  let chains = [];
+  try { chains = await sb('chains', { select: 'id,display_name' }); } catch {}
+
+  const deliveryRows = chains.map(c => `
+    <div class="delivery-row">
+      <span>${c.display_name}</span>
+      <input type="number" min="0" step="1" data-chain="${c.id}" value="${state.settings.delivery?.[c.id] ?? 0}" placeholder="₪">
+    </div>`).join('');
+
+  openSheet(`
+    <h2>הגדרות</h2>
+    <div class="field">
+      <label>המיקום שלי</label>
+      <input type="text" id="locationInput" value="${state.settings.location || ''}" placeholder="עיר / יישוב">
+      <div class="hint">⚠️ עדיין לא פעיל בפועל - עוד לא מיפינו את המיקום המדויק של כל הסניפים. נשמר כבר עכשיו כדי שיהיה מוכן ברגע שזה יופעל.</div>
+    </div>
+    <div class="field">
+      <label>איך בד"כ מגיעים לקניות?</label>
+      <select id="transportInput">
+        <option value="car" ${state.settings.transport === 'car' ? 'selected' : ''}>ברכב</option>
+        <option value="public" ${state.settings.transport === 'public' ? 'selected' : ''}>תחבורה ציבורית</option>
+        <option value="walk" ${state.settings.transport === 'walk' ? 'selected' : ''}>הליכה</option>
+      </select>
+      <div class="hint">⚠️ ישפיע על חישוב "הכי נוח" ברגע שיהיה לנו מרחק אמיתי לכל סניף.</div>
+    </div>
+    <div class="field">
+      <label>עלות משלוח ידועה לפי רשת (₪, אופציונלי)</label>
+      ${deliveryRows || '<div class="hint">רשתות ייטענו כאן ברגע שיש חיבור ל-DB.</div>'}
+      <div class="hint">אם ידוע לך כמה עולה משלוח אצלך באזור, מלא כאן - זה ישפיע מיד על ההשוואה כשמסמנים "לחשב עם משלוח" ברשימה.</div>
+    </div>
+    <button class="btn primary" style="width:100%;padding:14px;" id="saveSettingsBtn">שמור הגדרות</button>
+  `);
+
+  document.getElementById('saveSettingsBtn').onclick = () => {
+    const delivery = {};
+    sheet.querySelectorAll('[data-chain]').forEach(inp => { delivery[inp.dataset.chain] = Number(inp.value) || 0; });
+    state.settings = {
+      location: document.getElementById('locationInput').value.trim(),
+      transport: document.getElementById('transportInput').value,
+      delivery,
+    };
+    lsSet(LS_KEYS.settings, state.settings);
+    closeSheet();
   };
 }
 
