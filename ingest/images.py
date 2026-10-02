@@ -25,6 +25,7 @@ log = logging.getLogger("images")
 
 OFF_API = "https://world.openfoodfacts.org/api/v2/product"
 RAMI_LEVY_IMG = "https://img.rami-levy.co.il/product/{gtin}/small.jpg"
+PRICEZ_IMG = "https://m.pricez.co.il/ProductPictures/{gtin}.jpg"
 BUCKET = "product-images"
 MAX_PRODUCTS = int(os.environ.get("MAX_IMAGES_PER_RUN", "5000"))
 _UA = "lekanot-ingest/1.0 (+https://github.com/tzuriel055-ai/lekanot)"
@@ -34,20 +35,25 @@ class RateLimited(Exception):
     pass
 
 
-def fetch_rami_levy_image(gtin: str) -> bytes | None:
-    """מקור ראשי: ה-CDN הציבורי של רמי לוי, ישירות לפי ברקוד. אומת ידנית:
-    ברקוד אמיתי -> 200 עם תמונה אמיתית; ברקוד מומצא -> 403 נקי, לא placeholder.
-    בשונה מ-Open Food Facts, זה הקטלוג האמיתי של רשת ישראלית, אז הכיסוי
-    למוצרים מקומיים צפוי להיות הרבה יותר גבוה."""
-    try:
-        resp = requests.get(RAMI_LEVY_IMG.format(gtin=gtin), headers={"User-Agent": _UA}, timeout=15)
-    except requests.RequestException:
-        return None
-    if resp.status_code != 200:
-        return None
-    if not resp.headers.get("Content-Type", "").startswith("image/"):
-        return None
-    return resp.content
+# מקורות ישירים, לפי ברקוד, בסדר עדיפות - שניהם אומתו ידנית: ברקוד אמיתי
+# מחזיר 200 עם תמונה אמיתית, ברקוד מומצא מחזיר שגיאה נקייה (403/404), לא
+# placeholder מתחזה. כדי להוסיף מקור נוסף בעתיד - שורה אחת כאן, לא פונקציה חדשה.
+DIRECT_IMAGE_SOURCES = [
+    ("rami-levy", RAMI_LEVY_IMG),
+    ("pricez", PRICEZ_IMG),
+]
+
+
+def fetch_direct_image(gtin: str) -> tuple[str, bytes] | None:
+    for name, template in DIRECT_IMAGE_SOURCES:
+        try:
+            resp = requests.get(template.format(gtin=gtin), headers={"User-Agent": _UA}, timeout=15)
+        except requests.RequestException:
+            continue
+        if resp.status_code == 200 and resp.headers.get("Content-Type", "").startswith("image/"):
+            return name, resp.content
+        time.sleep(0.1)  # לא מציפים את המקור הבא אם הראשון כבר ענה מהר
+    return None
 
 
 def fetch_off_image_url(gtin: str) -> str | None:
@@ -82,27 +88,28 @@ def main() -> None:
     )
     log.info("checking %d products without an image", len(products))
 
-    found_rami = 0
+    found_direct: dict[str, int] = {name: 0 for name, _ in DIRECT_IMAGE_SOURCES}
     found_off = 0
     rate_limit_hits = 0
     for i, p in enumerate(products):
         gtin = p["gtin"]
         saved = False
 
-        # 1) מקור ראשי - רמי לוי, ישירות, בלי צורך ב-API נפרד
-        content = fetch_rami_levy_image(gtin)
-        if content:
+        # 1) מקורות ישירים, לפי סדר העדיפות ב-DIRECT_IMAGE_SOURCES
+        direct = fetch_direct_image(gtin)
+        if direct:
+            source_name, content = direct
             try:
                 stored_url = db.upload_image(BUCKET, f"{gtin}.jpg", content, "image/jpeg")
                 db.update("products", {"gtin": gtin}, {"image_url": stored_url})
-                found_rami += 1
+                found_direct[source_name] += 1
                 saved = True
-                log.info("image saved for gtin %s (rami-levy)", gtin)
+                log.info("image saved for gtin %s (%s)", gtin, source_name)
             except Exception as exc:
-                log.warning("failed saving rami-levy image for %s: %s", gtin, exc)
-        time.sleep(0.15)  # ה-CDN שלהם, פחות צריך להיזהר, אבל בכל זאת לא מציפים
+                log.warning("failed saving %s image for %s: %s", source_name, gtin, exc)
+        time.sleep(0.15)
 
-        # 2) גיבוי - Open Food Facts, רק אם רמי לוי לא הכיר את הברקוד
+        # 2) גיבוי - Open Food Facts, רק אם אף מקור ישיר לא הכיר את הברקוד
         if not saved:
             try:
                 image_url = fetch_off_image_url(gtin)
@@ -128,17 +135,19 @@ def main() -> None:
             # חסר בפעם הקודמת וגרם לחסימה.
             time.sleep(0.4)
 
-        total_found = found_rami + found_off
+        total_found = sum(found_direct.values()) + found_off
         if (i + 1) % 200 == 0:
+            breakdown = ", ".join(f"{k}={v}" for k, v in found_direct.items())
             log.info(
-                "progress: %d/%d checked, %d found (%d rami-levy, %d off), %d rate-limit hits",
-                i + 1, len(products), total_found, found_rami, found_off, rate_limit_hits,
+                "progress: %d/%d checked, %d found (%s, off=%d), %d rate-limit hits",
+                i + 1, len(products), total_found, breakdown, found_off, rate_limit_hits,
             )
 
-    total_found = found_rami + found_off
+    total_found = sum(found_direct.values()) + found_off
+    breakdown = ", ".join(f"{k}={v}" for k, v in found_direct.items())
     log.info(
-        "done: %d/%d products got a real image (%d rami-levy, %d open-food-facts, %d rate-limit hits)",
-        total_found, len(products), found_rami, found_off, rate_limit_hits,
+        "done: %d/%d products got a real image (%s, open-food-facts=%d, %d rate-limit hits)",
+        total_found, len(products), breakdown, found_off, rate_limit_hits,
     )
 
 
