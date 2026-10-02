@@ -8,7 +8,7 @@ on:
 jobs:
   images:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 340
     steps:
       - uses: actions/checkout@v4
 

@@ -27,7 +27,7 @@ OFF_API = "https://world.openfoodfacts.org/api/v2/product"
 RAMI_LEVY_IMG = "https://img.rami-levy.co.il/product/{gtin}/small.jpg"
 PRICEZ_IMG = "https://m.pricez.co.il/ProductPictures/{gtin}.jpg"
 BUCKET = "product-images"
-MAX_PRODUCTS = int(os.environ.get("MAX_IMAGES_PER_RUN", "5000"))
+MAX_PRODUCTS = int(os.environ.get("MAX_IMAGES_PER_RUN", "50000"))  # בפועל - בלי הגבלה אמיתית
 _UA = "lekanot-ingest/1.0 (+https://github.com/tzuriel055-ai/lekanot)"
 
 
