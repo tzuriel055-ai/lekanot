@@ -74,8 +74,15 @@
   .chip{flex:0 0 auto;padding:8px 16px;border-radius:var(--radius-pill);font-size:13px;color:var(--ink-dim);}
   .chip.active{background:var(--neutral-highlight);color:var(--ink);font-weight:500;}
 
-  @media (max-width:759px){
-    header.top.collapsed .brand-row,header.top.collapsed .header-actions,header.top.collapsed .chips{max-height:0;opacity:0;margin:0;pointer-events:none;}
+  /* בכל רוחב מסך: בגלילה, הקטגוריות תמיד נעלמות מתחת לחיפוש */
+  header.top.collapsed .chips{max-height:0;opacity:0;margin:0;pointer-events:none;}
+
+  /* מסכים לא רחבים (כולל חצי-מחשב): גם המותג+פעולות נעלמים, והחיפוש מתנתק
+     לבועה צפה - בדיוק כמו הסרגל התחתון, לא נשאר דבוק לרוחב מלא למעלה */
+  @media (max-width:1099px){
+    header.top.collapsed .brand-row,header.top.collapsed .header-actions{max-height:0;opacity:0;margin:0;pointer-events:none;}
+    header.top.collapsed .search-row{position:fixed;top:14px;left:50%;transform:translateX(-50%);width:min(92vw,480px);z-index:50;}
+    header.top.collapsed .search-bubble{background:var(--glass-strong);box-shadow:var(--shadow-float);}
   }
   @media (min-width:760px){
     .brand-row img{width:42px;}
@@ -83,6 +90,14 @@
     .search-row{order:2;flex:1 1 auto;min-width:220px;}
     .header-actions{order:3;}
     .chips{order:4;}
+  }
+  @media (min-width:1100px){
+    .header-inner{max-width:1000px;}
+    .wrap{max-width:1400px;}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:18px;}
+    .navbar{padding:10px 16px;gap:8px;}
+    .navbar button{padding:11px 24px;font-size:22px;}
+    .navbar button .lbl{font-size:11.5px;}
   }
 
   /* ===== דרופדאון חיפוש (כשפותחים חיפוש בזמן שעמוד אחר פתוח) ===== */
@@ -225,13 +240,17 @@
   .new-list-tile{background:var(--neutral-highlight);border-radius:var(--radius-sq);padding:22px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:14px;color:var(--ink-dim);}
 
   /* ===== מבצעים ===== */
-  .deal-card{background:var(--surface);border-radius:var(--radius-sq);box-shadow:var(--shadow-card);padding:12px;display:flex;gap:10px;margin-bottom:10px;align-items:center;}
-  .deal-card .thumb{width:54px;height:54px;border-radius:14px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:20px;overflow:hidden;flex-shrink:0;}
+  .deals-search-sticky{position:sticky;top:var(--header-h);z-index:5;background:var(--bg);padding-bottom:10px;margin-bottom:4px;}
+  .deal-card{background:var(--surface);border-radius:var(--radius-sq);box-shadow:var(--shadow-card);padding:12px;display:flex;flex-direction:column;gap:6px;}
+  .deal-card .thumb{aspect-ratio:1/1;border-radius:var(--radius-sq-sm);display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--accent);background:var(--accent-soft);overflow:hidden;}
   .deal-card .thumb img{width:100%;height:100%;object-fit:cover;}
-  .deal-card .info{flex:1;}
-  .deal-card .info b{font-size:13px;}
-  .deal-card .info .meta{font-size:11px;color:var(--ink-dim);margin-top:2px;}
-  .deal-card .price{font-size:14px;color:var(--accent);font-weight:500;}
+  .deal-card .name{font-size:13px;line-height:1.35;min-height:35px;color:var(--ink);}
+  .deal-card .chain-meta{font-size:10px;color:var(--ink-faint);}
+  .deal-card .price-row{display:flex;align-items:baseline;gap:6px;}
+  .deal-card .was{font-size:11px;color:var(--ink-faint);text-decoration:line-through;}
+  .deal-card .now{font-size:15px;color:var(--danger);font-weight:600;}
+  .deals-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:13px;}
+  @media (min-width:1100px){.deals-grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:18px;}}
 
   .field{margin-bottom:16px;}
   .field label{display:block;font-size:13px;color:var(--ink-dim);margin-bottom:6px;}
@@ -827,20 +846,58 @@ function renderListsPage() {
 /* ======================= מבצעים ======================= */
 async function renderDealsPage() {
   const content = document.getElementById('dealsContent');
-  content.innerHTML = `<div class="field"><input type="text" id="dealsSearch" placeholder="חיפוש במבצעים"></div><div id="dealsList" class="loading">טוען מבצעים…</div>`;
+  content.innerHTML = `<div class="deals-search-sticky"><div class="field" style="margin:0;"><input type="text" id="dealsSearch" placeholder="חיפוש במבצעים"></div></div><div id="dealsList" class="loading">טוען מבצעים…</div>`;
+
   async function load(filter) {
     const listEl = document.getElementById('dealsList');
     listEl.innerHTML = `<div class="loading">טוען מבצעים…</div>`;
     try {
-      const rows = await sb('promos', { select: '*,products(canonical_name,image_url,is_weighted),stores(name,chains(display_name))', order: 'updated_at.desc', limit: '60' });
+      const rows = await sb('promos', { select: '*,products(id,canonical_name,image_url,is_weighted),stores(id,name,chains(display_name))', order: 'updated_at.desc', limit: '60' });
       const filtered = filter ? rows.filter(r => (r.products?.canonical_name || '').includes(filter)) : rows;
       if (!filtered.length) { listEl.innerHTML = '<div class="empty">אין כרגע מבצעים רשומים אצלנו.</div>'; return; }
-      listEl.innerHTML = filtered.map(r => `
-        <div class="deal-card">
-          <div class="thumb">${r.products?.image_url ? `<img src="${r.products.image_url}">` : `<i class="ti ${guessIcon(r.products?.canonical_name)}"></i>`}</div>
-          <div class="info"><b>${r.products?.canonical_name || ''}</b><div class="meta">${r.stores?.chains?.display_name || ''} · ${r.description || ''}</div></div>
-          <div class="price">${r.promo_price ? Number(r.promo_price).toFixed(2) + ' ₪' : ''}</div>
-        </div>`).join('');
+
+      // מחיר "לפני" אמיתי: שולפים את שורת המחיר הרגילה של אותו מוצר *באותו סניף בדיוק*,
+      // לא ממציאים השוואה - אם היא לא נמצאת, פשוט לא מציגים "לפני" לאותו מוצר.
+      const productIds = [...new Set(filtered.map(r => r.products?.id).filter(Boolean))];
+      let basePrices = [];
+      if (productIds.length) basePrices = await sb('prices', { select: 'product_id,store_id,price', product_id: `in.(${productIds.join(',')})` });
+      const baseMap = new Map(basePrices.map(p => [`${p.product_id}:${p.store_id}`, Number(p.price)]));
+
+      listEl.innerHTML = `<div class="deals-grid">${filtered.map(r => {
+        const p = r.products; if (!p) return '';
+        const was = baseMap.get(`${p.id}:${r.stores?.id}`);
+        const now = r.promo_price ? Number(r.promo_price) : null;
+        const draftQty = state.qtyDraft.get(p.id) || 1;
+        return `
+        <div class="card deal-card" data-pid="${p.id}">
+          <div class="thumb">${p.image_url ? `<img src="${p.image_url}">` : `<i class="ti ${guessIcon(p.canonical_name)}"></i>`}</div>
+          <div class="name">${p.canonical_name}</div>
+          <div class="chain-meta">${r.stores?.chains?.display_name || ''}${r.description ? ' · ' + r.description : ''}</div>
+          <div class="price-row">${was != null && now != null && was > now ? `<span class="was">${was.toFixed(2)} ₪</span>` : ''}${now != null ? `<span class="now">${now.toFixed(2)} ₪</span>` : ''}</div>
+          <div class="bottom-row">
+            <div class="stepper"><button data-dstep="-1" data-id="${p.id}">−</button><div class="numcol"><span class="n" data-dqty="${p.id}">${draftQty}</span>${p.is_weighted ? '<span class="unit">ק״ג</span>' : ''}</div><button data-dstep="1" data-id="${p.id}">+</button></div>
+            <button class="add-circle" data-dadd="${p.id}"><i class="ti ti-plus"></i></button>
+          </div>
+        </div>`;
+      }).join('')}</div>`;
+
+      listEl.querySelectorAll('.deal-card').forEach(card => {
+        const pid = card.dataset.pid;
+        const promoRow = filtered.find(r => r.products?.id === pid);
+        const product = promoRow.products;
+        card.querySelectorAll('[data-dstep]').forEach(b => b.onclick = () => {
+          const step = product.is_weighted ? 0.5 : 1;
+          const cur = state.qtyDraft.get(pid) || 1;
+          const next = Math.max(step, +(cur + Number(b.dataset.dstep) * step).toFixed(2));
+          state.qtyDraft.set(pid, next);
+          card.querySelector(`[data-dqty="${pid}"]`).textContent = next;
+        });
+        card.querySelector('[data-dadd]').onclick = (e) => {
+          addToCart(product, state.qtyDraft.get(pid) || 1);
+          state.qtyDraft.set(pid, 1); card.querySelector(`[data-dqty="${pid}"]`).textContent = 1;
+          const btn = e.currentTarget; btn.classList.add('spin'); setTimeout(() => btn.classList.remove('spin'), 350);
+        };
+      });
     } catch { listEl.innerHTML = '<div class="empty">שגיאה בטעינת מבצעים.</div>'; }
   }
   document.getElementById('dealsSearch').addEventListener('input', (e) => load(e.target.value.trim()));
