@@ -68,10 +68,11 @@
   .search-bubble input{flex:1;border:none;outline:none;background:transparent;color:var(--ink);font-size:15px;padding:11px 10px;}
   .search-bubble input::placeholder{color:var(--ink-faint);}
   .search-bubble .icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink-dim);font-size:16px;}
+  .search-bubble select{background:transparent;border:none;outline:none;color:var(--ink-dim);font-size:11px;max-width:84px;cursor:pointer;padding:0 4px;}
 
   .chips{order:4;flex:1 1 100%;display:flex;gap:7px;overflow-x:auto;padding:2px 2px 0;scrollbar-width:none;transition:max-height .28s ease,opacity .22s ease;max-height:50px;opacity:1;}
   .chips::-webkit-scrollbar{display:none;}
-  .chip{flex:0 0 auto;padding:8px 16px;border-radius:var(--radius-pill);font-size:13px;color:var(--ink-dim);}
+  .chip{flex:0 0 auto;padding:8px 16px;border-radius:var(--radius-pill);font-size:13px;color:var(--ink-dim);cursor:pointer;user-select:none;}
   .chip.active{background:var(--neutral-highlight);color:var(--ink);font-weight:500;}
 
   /* בכל רוחב מסך: בגלילה, הקטגוריות תמיד נעלמות מתחת לחיפוש */
@@ -83,6 +84,9 @@
     header.top.collapsed .brand-row,header.top.collapsed .header-actions{max-height:0;opacity:0;margin:0;pointer-events:none;}
     header.top.collapsed .search-row{position:fixed;top:14px;left:50%;transform:translateX(-50%);width:min(92vw,480px);z-index:50;}
     header.top.collapsed .search-bubble{background:var(--glass-strong);box-shadow:var(--shadow-float);}
+    /* חייב, אחרת נשאר פס זכוכית ריק דבוק למעלה - התוכן היחיד שנשאר (החיפוש)
+       כבר התנתק לבועה צפה משלו, אז המעטפת של ההדר עצמו צריכה להיעלם */
+    header.top.collapsed{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;border-bottom:none;box-shadow:none;padding-bottom:0;}
   }
   @media (min-width:760px){
     .brand-row img{width:42px;}
@@ -136,9 +140,39 @@
   .navbar button.active{background:rgba(255,255,255,0.8);color:var(--ink);transform:scale(1.08);}
   .navbar .badge{position:absolute;top:1px;left:4px;background:var(--danger);color:#fff;font-size:9px;font-weight:700;border-radius:999px;min-width:15px;height:15px;display:flex;align-items:center;justify-content:center;padding:0 3px;}
 
-  .float-compare{position:fixed;bottom:calc(84px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);
-    background:var(--glass-strong);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--glass-border);
-    color:var(--ink);border-radius:var(--radius-pill);box-shadow:var(--shadow-float);padding:12px 22px;font-size:13px;font-weight:500;z-index:58;}
+  .compare-glow-wrap{position:relative;display:flex;justify-content:center;margin-top:18px;padding-top:14px;}
+  .compare-glow-wrap::before{content:"";position:absolute;top:0;left:50%;transform:translateX(-50%);width:70%;height:36px;
+    background:radial-gradient(ellipse at center, rgba(14,87,90,0.22), transparent 72%);filter:blur(10px);pointer-events:none;}
+  .btn-compare{position:relative;background:var(--glass-strong);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--glass-border);color:var(--ink);border-radius:var(--radius-pill);box-shadow:var(--shadow-float);
+    padding:13px 30px;font-size:13.5px;font-weight:500;}
+
+  /* ===== תת-סרגל תוצאות - דבוק מעל הסרגל התחתון הרגיל ===== */
+  .results-subnav{position:fixed;bottom:calc(84px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%) translateY(20px);
+    display:flex;gap:4px;background:var(--glass-strong);backdrop-filter:blur(18px) saturate(170%);-webkit-backdrop-filter:blur(18px) saturate(170%);
+    border:1px solid var(--glass-border);border-radius:var(--radius-pill);box-shadow:var(--shadow-float);padding:6px;z-index:59;
+    opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;}
+  .results-subnav.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0);}
+  .results-subnav button{padding:9px 16px;border-radius:var(--radius-pill);font-size:12px;color:var(--ink-dim);display:flex;align-items:center;gap:5px;}
+  .results-subnav button.active{background:rgba(255,255,255,0.85);color:var(--ink);font-weight:500;}
+
+  .results-grid{display:flex;flex-direction:column;gap:16px;}
+  @media (min-width:900px){.results-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));align-items:start;}}
+
+  .compare-table{width:100%;border-collapse:collapse;font-size:12px;background:var(--surface);border-radius:var(--radius-sq);overflow:hidden;box-shadow:var(--shadow-card);}
+  .compare-table th,.compare-table td{padding:10px 8px;text-align:center;border-bottom:1px solid var(--neutral-highlight);}
+  .compare-table th{background:var(--neutral-highlight);font-weight:500;font-size:11px;}
+  .compare-table td:first-child,.compare-table th:first-child{text-align:right;font-size:12px;}
+  .compare-table .na{color:var(--ink-faint);}
+  .table-wrap{overflow-x:auto;margin-top:14px;}
+
+  /* ===== מצב קניה במסך מלא לרשימה אחת, עם מעבר בין רשימות ===== */
+  .shop-switcher{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);
+    display:flex;gap:4px;background:var(--glass-strong);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border:1px solid var(--glass-border);border-radius:var(--radius-pill);box-shadow:var(--shadow-float);padding:6px;z-index:60;max-width:92vw;overflow-x:auto;}
+  .shop-switcher button{padding:9px 16px;border-radius:var(--radius-pill);font-size:12px;color:var(--ink-dim);white-space:nowrap;}
+  .shop-switcher button.active{background:rgba(255,255,255,0.85);color:var(--ink);font-weight:500;}
+  .shop-close{position:fixed;top:14px;left:16px;z-index:60;width:36px;height:36px;border-radius:50%;background:var(--glass-strong);backdrop-filter:blur(14px);box-shadow:var(--shadow-card);display:flex;align-items:center;justify-content:center;color:var(--ink-dim);}
 
   /* ===== עמודים ===== */
   .page{position:fixed;inset:0;background:var(--bg);z-index:35;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.22,.9,.28,1);}
@@ -205,15 +239,17 @@
   /* ===== מחברת ===== */
   .notebook{background:#FFFDF8;border-radius:16px;box-shadow:0 4px 24px rgba(14,87,90,0.14);padding:26px 20px 16px;margin-bottom:18px;position:relative;overflow:hidden;}
   .notebook::before{content:"";position:absolute;inset-inline-start:0;top:0;bottom:0;width:4px;background:repeating-linear-gradient(180deg,var(--gold) 0 10px,transparent 10px 20px);opacity:.5;}
-  .notebook .coil{position:absolute;top:8px;left:0;right:0;display:flex;justify-content:space-evenly;padding:0 24px;}
-  .notebook .coil span{width:9px;height:9px;border-radius:50%;background:var(--bg);box-shadow:inset 0 1px 3px rgba(0,0,0,0.25);}
+  .notebook .coil{position:absolute;top:-9px;left:0;right:0;display:flex;justify-content:space-evenly;padding:0 22px;z-index:2;}
+  .notebook .coil span{width:15px;height:15px;border-radius:50%;border:3px solid #AFAFAF;background:var(--bg);box-shadow:0 2px 2px rgba(0,0,0,0.15);}
   .notebook .nb-store{font-family:'Frank Ruhl Libre',serif;font-size:19px;color:var(--ink);margin-bottom:2px;}
   .notebook .nb-sub{font-size:11px;color:var(--ink-dim);margin-bottom:12px;}
-  .nb-line{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px dashed rgba(14,87,90,0.18);}
+  .nb-line{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;}
   .nb-line .l{display:flex;align-items:center;gap:10px;}
   .nb-line .thumb-sm{width:30px;height:30px;border-radius:9px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--accent);overflow:hidden;flex-shrink:0;}
   .nb-line .thumb-sm img{width:100%;height:100%;object-fit:cover;}
   .nb-line .nm{font-family:'Frank Ruhl Libre',serif;font-size:14px;color:var(--ink);}
+  .nb-line.done-line{opacity:.45;}
+  .nb-line.done-line .nm{text-decoration:line-through;}
   .nb-line .pr{font-size:13px;color:var(--ink-dim);white-space:nowrap;}
   .nb-total-row{display:flex;justify-content:space-between;align-items:center;padding-top:12px;margin-top:4px;}
   .nb-total-row b{font-family:'Frank Ruhl Libre',serif;font-size:20px;color:var(--accent);}
@@ -286,7 +322,7 @@
       <button class="avatar-btn" id="avatarBtn" title="פרופיל"><i class="ti ti-user"></i></button>
       <button class="bell-btn" id="notifBtn" title="התראות"><i class="ti ti-bell"></i></button>
     </div>
-    <div class="search-row"><div class="search-bubble"><span class="icon"><i class="ti ti-search"></i></span><input id="searchInput" placeholder="מה מחפשים היום?"></div></div>
+    <div class="search-row"><div class="search-bubble"><span class="icon"><i class="ti ti-search"></i></span><input id="searchInput" placeholder="מה מחפשים היום?"><select id="searchScope" title="חיפוש ברשת ספציפית"><option value="">בכל הרשתות</option></select></div></div>
     <div class="chips" id="categoryChips"></div>
   </div>
 </header>
@@ -313,6 +349,11 @@
 <div class="sheet-backdrop" id="productBackdrop"></div>
 <div class="sheet" id="productSheet"><div class="grabber"></div><div class="sheet-inner" id="productContent"></div></div>
 
+<div class="results-subnav" id="resultsSubnav">
+  <button class="active" data-view="allChains"><i class="ti ti-building-store"></i> כל הרשתות</button>
+  <button data-view="split"><i class="ti ti-arrows-split"></i> פיצול מקסימלי</button>
+</div>
+<div class="page" id="pageResults"><div class="page-inner"><h2>תוצאת ההשוואה</h2><div id="resultsContent"></div></div></div>
 <div class="page" id="pageCart"><div class="page-inner"><h2>הרשימה שלי</h2><div id="cartContent"></div></div></div>
 <div class="page" id="pageLists"><div class="page-inner"><h2>הרשימות שלי</h2><div id="listsContent"></div></div></div>
 <div class="page" id="pageDeals"><div class="page-inner"><h2>מבצעים</h2><div id="dealsContent"></div></div></div>
@@ -333,6 +374,11 @@ async function sb(path, params = {}) {
   const qs = new URLSearchParams(params).toString();
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}?${qs}`, { headers: sbHeaders() });
   if (!res.ok) throw new Error(`Supabase error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+async function sbRpc(fnName, body) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fnName}`, { method: 'POST', headers: sbHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`Supabase RPC error ${res.status}: ${await res.text()}`);
   return res.json();
 }
 async function sbInsert(path, body) {
@@ -396,10 +442,10 @@ async function fetchCheapestFor(productIds) {
 }
 
 /* ======================= ניווט ======================= */
-const PAGE_IDS = ['pageCart','pageLists','pageDeals','pageSettings','pageShop'];
+const PAGE_IDS = ['pageCart','pageLists','pageDeals','pageSettings','pageShop','pageResults'];
 function openPage(id) { document.getElementById(id).classList.add('open'); }
 function closePage(id) { document.getElementById(id).classList.remove('open'); }
-function closeAllPages() { PAGE_IDS.forEach(closePage); closeProductSheet(); hideSearchDropdown(); }
+function closeAllPages() { PAGE_IDS.forEach(closePage); closeProductSheet(); hideSearchDropdown(); document.getElementById('resultsSubnav').classList.remove('show'); }
 function anyPageOpen() { return PAGE_IDS.some(id => document.getElementById(id).classList.contains('open')); }
 function setActiveNav(name) { document.querySelectorAll('.navbar button[data-nav]').forEach(b => b.classList.toggle('active', b.dataset.nav === name)); }
 
@@ -430,14 +476,33 @@ PAGE_IDS.forEach(id => document.getElementById(id).addEventListener('scroll', (e
 
 /* ======================= חיפוש: בבית מסנן ישירות, בכל עמוד אחר נפתח כ-dropdown ======================= */
 function hideSearchDropdown() { document.getElementById('searchDropdown').classList.remove('show'); }
+async function fetchProductIdsAtChain(ids, chainId) {
+  if (!ids.length || !chainId) return null;
+  try {
+    const rows = await sb('prices', { select: 'product_id,stores!inner(chain_id)', product_id: `in.(${ids.join(',')})`, 'stores.chain_id': `eq.${chainId}` });
+    return new Set(rows.map(r => r.product_id));
+  } catch { return null; }
+}
+async function fuzzySearch(core, limit) {
+  try { return await sbRpc('search_products_fuzzy', { q: core, match_limit: limit }); }
+  catch { return sb('products', { select: '*', canonical_name: `ilike.*${core}*`, limit: String(limit) }); } // נפילה חזרה אם ה-RPC עוד לא מותקן ב-DB
+}
+async function applyScope(products) {
+  const scope = document.getElementById('searchScope').value;
+  if (!scope) return products;
+  const ids = await fetchProductIdsAtChain(products.map(p => p.id), scope);
+  return ids ? products.filter(p => ids.has(p.id)) : products;
+}
+
 async function searchIntoDropdown(q) {
   const dd = document.getElementById('searchDropdown');
   const core = extractCoreQuery(q);
   if (!core.trim()) { hideSearchDropdown(); return; }
   dd.classList.add('show');
   document.getElementById('searchDropdownGrid').innerHTML = `<div class="loading">מחפש…</div>`;
-  const rows = await sb('products', { select: '*', canonical_name: `ilike.*${core}*`, limit: '40' });
-  const ranked = rankProducts(rows, core).slice(0, 24);
+  const rows = await fuzzySearch(core, 40);
+  let ranked = rankProducts(rows, core).slice(0, 24);
+  ranked = await applyScope(ranked);
   const cheapest = await fetchCheapestFor(ranked.map(p => p.id));
   renderGridInto(ranked, 'searchDropdownGrid', cheapest);
 }
@@ -473,10 +538,19 @@ async function loadInitial() {
 async function searchProducts(q) {
   if (!q.trim()) return loadInitial();
   const core = extractCoreQuery(q);
-  const rows = await sb('products', { select: '*', canonical_name: `ilike.*${core}*`, limit: '80' });
-  const ranked = rankProducts(rows, core).slice(0, 60);
+  const rows = await fuzzySearch(core, 80);
+  let ranked = rankProducts(rows, core).slice(0, 60);
+  ranked = await applyScope(ranked);
   state.products = ranked;
   await renderGridWithPrices(ranked);
+}
+async function populateSearchScope() {
+  try {
+    const chains = await sb('chains', { select: 'id,display_name' });
+    const sel = document.getElementById('searchScope');
+    for (const c of chains) sel.insertAdjacentHTML('beforeend', `<option value="${c.id}">${c.display_name}</option>`);
+    sel.onchange = () => { anyPageOpen() ? searchIntoDropdown(document.getElementById('searchInput').value) : searchProducts(document.getElementById('searchInput').value); };
+  } catch {}
 }
 async function fetchPricesForProduct(productId) {
   return sb('prices', { select: 'id,price,unit_price,in_stock,store_id,product_id,stores(name,city,chain_id,chains(display_name))', product_id: `eq.${productId}` });
@@ -598,87 +672,98 @@ async function openProductSheet(product) {
   });
 }
 
-/* ======================= מנוע ההשוואה ======================= */
+/* ======================= מנוע ההשוואה - לפי רשת, לא לפי סניף ========================
+   לרוב הרשתות אין הבדל משמעותי במחיר בין סניפים, ואנחנו ממילא דוגמים רק חלק
+   מהסניפים של כל רשת - השוואה לפי סניף ספציפי יצרה תמונה מפוצלת ומטעה
+   ("זמין רק בסניף אחד"). לכן: לכל מוצר, לכל רשת, לוקחים את המחיר הזול ביותר
+   מבין הסניפים שיש לנו מידע עליהם מאותה רשת - זה "מחיר הרשת" לצורך ההשוואה.
+   בעמוד המוצר הבודד (openProductSheet) עדיין מוצג הפירוט המלא לפי סניף. */
 async function computePlans() {
   const items = [...state.cart.values()];
-  const priceMap = new Map();
+  const priceByChain = new Map();
   for (const { product } of items) {
     const rows = await fetchPricesForProduct(product.id);
-    priceMap.set(product.id, rows.map(r => ({ storeId: r.store_id, storeName: r.stores?.name || '', chainId: r.stores?.chain_id, chainName: r.stores?.chains?.display_name || '', price: Number(r.price), unitPrice: r.unit_price ? Number(r.unit_price) : null })));
+    const byChain = new Map();
+    for (const r of rows) {
+      const chainId = r.stores?.chain_id;
+      const price = Number(r.price);
+      const cur = byChain.get(chainId);
+      if (!cur || price < cur.price) byChain.set(chainId, { chainId, chainName: r.stores?.chains?.display_name || '', price, unitPrice: r.unit_price ? Number(r.unit_price) : null, storeName: r.stores?.name || '' });
+    }
+    priceByChain.set(product.id, [...byChain.values()]);
   }
-  const candidateStores = [...new Set([...priceMap.values()].flat().map(r => r.storeId))];
+  const candidateChains = [...new Set([...priceByChain.values()].flat().map(r => r.chainId))];
   function lineCost(entry, offer) { return (entry.product.is_weighted && offer.unitPrice) ? offer.unitPrice * entry.qty : offer.price * entry.qty; }
   function deliveryFor(chainId) { if (!state.includeDelivery) return 0; const f = state.settings.delivery?.[chainId]; return f ? Number(f) : 0; }
 
   function planSingleBest() {
     let best = null;
-    for (const storeId of candidateStores) {
-      let total = 0; const missing = []; let storeName = '', chainName = '', chainId = null;
+    for (const chainId of candidateChains) {
+      let total = 0; const missing = []; let chainName = '';
       for (const entry of items) {
-        const offer = (priceMap.get(entry.product.id) || []).find(o => o.storeId === storeId);
+        const offer = (priceByChain.get(entry.product.id) || []).find(o => o.chainId === chainId);
         if (!offer) { missing.push(entry.product.canonical_name); continue; }
-        total += lineCost(entry, offer); storeName = offer.storeName; chainName = offer.chainName; chainId = offer.chainId;
+        total += lineCost(entry, offer); chainName = offer.chainName;
       }
       if (missing.length) continue;
       total += deliveryFor(chainId);
-      if (!best || total < best.total) best = { chainName, storeName, total, lines: items.map(e => ({ name: e.product.canonical_name, qty: e.qty, isWeighted: e.product.is_weighted, image: e.product.image_url, offer: (priceMap.get(e.product.id)||[]).find(o=>o.storeId===storeId) })) };
+      if (!best || total < best.total) best = { chainId, chainName, total, lines: items.map(e => ({ name: e.product.canonical_name, qty: e.qty, isWeighted: e.product.is_weighted, image: e.product.image_url, offer: (priceByChain.get(e.product.id)||[]).find(o=>o.chainId===chainId) })) };
     }
     return best;
   }
-  function allStoreTotals() {
-    // לכל חנות: מה יוצא אם קונים שם את כל מה שזמין, עם ציון מה חסר
+  function allChainTotals() {
     const out = [];
-    for (const storeId of candidateStores) {
-      let total = 0; const missing = []; let storeName = '', chainName = '', chainId = null; const lines = [];
+    for (const chainId of candidateChains) {
+      let total = 0; const missing = []; let chainName = ''; const lines = [];
       for (const entry of items) {
-        const offer = (priceMap.get(entry.product.id) || []).find(o => o.storeId === storeId);
+        const offer = (priceByChain.get(entry.product.id) || []).find(o => o.chainId === chainId);
         if (!offer) { missing.push(entry.product.canonical_name); continue; }
-        total += lineCost(entry, offer); storeName = offer.storeName; chainName = offer.chainName; chainId = offer.chainId;
+        total += lineCost(entry, offer); chainName = offer.chainName;
         lines.push({ name: entry.product.canonical_name, qty: entry.qty, isWeighted: entry.product.is_weighted, image: entry.product.image_url, offer });
       }
       if (!lines.length) continue;
       total += deliveryFor(chainId);
-      out.push({ chainName, storeName, total, missing, lines });
+      out.push({ chainId, chainName, total, missing, lines });
     }
     return out.sort((a, b) => a.total - b.total);
   }
   function splitUnlimited() {
-    const byStore = new Map();
+    const byChain = new Map();
     let totalAll = 0; const missing = [];
     for (const entry of items) {
-      const offers = priceMap.get(entry.product.id) || [];
+      const offers = priceByChain.get(entry.product.id) || [];
       if (!offers.length) { missing.push(entry.product.canonical_name); continue; }
       const best = offers.reduce((a, b) => lineCost(entry, b) < lineCost(entry, a) ? b : a);
       const cost = lineCost(entry, best);
       totalAll += cost;
-      if (!byStore.has(best.storeId)) byStore.set(best.storeId, { chainId: best.chainId, chainName: best.chainName, storeName: best.storeName, lines: [], total: 0 });
-      const g = byStore.get(best.storeId);
+      if (!byChain.has(best.chainId)) byChain.set(best.chainId, { chainId: best.chainId, chainName: best.chainName, lines: [], total: 0 });
+      const g = byChain.get(best.chainId);
       g.lines.push({ name: entry.product.canonical_name, qty: entry.qty, isWeighted: entry.product.is_weighted, image: entry.product.image_url, offer: best });
       g.total += cost;
     }
-    for (const g of byStore.values()) { g.total += deliveryFor(g.chainId); totalAll += deliveryFor(g.chainId); }
-    return { groups: [...byStore.values()].sort((a,b)=>b.total-a.total), total: totalAll, missing };
+    for (const g of byChain.values()) { g.total += deliveryFor(g.chainId); totalAll += deliveryFor(g.chainId); }
+    return { groups: [...byChain.values()].sort((a,b)=>b.total-a.total), total: totalAll, missing };
   }
   function splitCapped(n) {
-    const scored = candidateStores.map(storeId => {
+    const scored = candidateChains.map(chainId => {
       let total = 0, covered = 0;
-      for (const entry of items) { const offer = (priceMap.get(entry.product.id) || []).find(o => o.storeId === storeId); if (offer) { total += lineCost(entry, offer); covered++; } }
-      return { storeId, total, covered };
+      for (const entry of items) { const offer = (priceByChain.get(entry.product.id) || []).find(o => o.chainId === chainId); if (offer) { total += lineCost(entry, offer); covered++; } }
+      return { chainId, total, covered };
     }).sort((a, b) => b.covered - a.covered || a.total - b.total);
     const top = scored.slice(0, Math.min(10, scored.length));
     function combos(arr, size) { if (size === 0) return [[]]; if (arr.length < size) return []; const [first, ...rest] = arr; return [...combos(rest, size - 1).map(c => [first, ...c]), ...combos(rest, size)]; }
     let best = null;
     for (let size = 1; size <= Math.min(n, top.length); size++) {
       for (const combo of combos(top, size)) {
-        const storeIds = combo.map(c => c.storeId);
+        const chainIds = combo.map(c => c.chainId);
         let total = 0; const missing = []; const groupsMap = new Map();
         for (const entry of items) {
-          const offers = (priceMap.get(entry.product.id) || []).filter(o => storeIds.includes(o.storeId));
+          const offers = (priceByChain.get(entry.product.id) || []).filter(o => chainIds.includes(o.chainId));
           if (!offers.length) { missing.push(entry.product.canonical_name); continue; }
           const b = offers.reduce((a, c) => lineCost(entry, c) < lineCost(entry, a) ? c : a);
           total += lineCost(entry, b);
-          if (!groupsMap.has(b.storeId)) groupsMap.set(b.storeId, { chainId:b.chainId, chainName:b.chainName, storeName:b.storeName, lines:[], total:0 });
-          const g = groupsMap.get(b.storeId); g.lines.push({ name: entry.product.canonical_name, qty: entry.qty, isWeighted: entry.product.is_weighted, image: entry.product.image_url, offer:b }); g.total += lineCost(entry, b);
+          if (!groupsMap.has(b.chainId)) groupsMap.set(b.chainId, { chainId:b.chainId, chainName:b.chainName, lines:[], total:0 });
+          const g = groupsMap.get(b.chainId); g.lines.push({ name: entry.product.canonical_name, qty: entry.qty, isWeighted: entry.product.is_weighted, image: entry.product.image_url, offer:b }); g.total += lineCost(entry, b);
         }
         if (missing.length) continue;
         for (const g of groupsMap.values()) { g.total += deliveryFor(g.chainId); total += deliveryFor(g.chainId); }
@@ -687,7 +772,7 @@ async function computePlans() {
     }
     return best;
   }
-  return { single: planSingleBest(), allStores: allStoreTotals(), splitUnlimited: splitUnlimited(), splitCapped };
+  return { single: planSingleBest(), allChains: allChainTotals(), splitUnlimited: splitUnlimited(), splitCapped };
 }
 
 /* ======================= עגלה ======================= */
@@ -711,7 +796,7 @@ function renderCartPage() {
     ${rows || '<div class="empty">הרשימה ריקה</div>'}
     <div class="row-actions"><button class="btn" id="saveListBtn"><i class="ti ti-device-floppy"></i> שמור רשימה</button><button class="btn" id="copyListBtn"><i class="ti ti-copy"></i> העתק רשימה</button></div>
     <div class="toggle-row"><span>לחשב עם עלות משלוח</span><input type="checkbox" id="deliveryToggle" ${state.includeDelivery ? 'checked' : ''}></div>
-    <div id="plansHost" style="margin-top:14px;"></div>`;
+    ${items.length ? '<div class="compare-glow-wrap"><button class="btn-compare" id="goCompareBtn">קח אותי להשוואה</button></div>' : ''}`;
 
   content.querySelectorAll('[data-select]').forEach(el => el.onclick = () => { state.cart.get(el.dataset.select).selected = !state.cart.get(el.dataset.select).selected; renderCartPage(); });
   document.getElementById('selectAllBtn')?.addEventListener('click', () => { for (const v of state.cart.values()) v.selected = true; renderCartPage(); });
@@ -720,29 +805,17 @@ function renderCartPage() {
   document.getElementById('deliveryToggle').onchange = (e) => { state.includeDelivery = e.target.checked; };
   document.getElementById('saveListBtn').onclick = () => renderSaveListForm();
   document.getElementById('copyListBtn').onclick = async () => { const text = cartAsLines().map(l => `${l.name} — ${l.qty}${l.is_weighted ? ' ק"ג' : ' יח׳'}`).join('\n'); try { await navigator.clipboard.writeText(text); } catch {} };
-
-  updateFloatCompareBtn();
+  document.getElementById('goCompareBtn')?.addEventListener('click', async () => {
+    const overlay = document.getElementById('computeOverlay');
+    overlay.classList.add('show');
+    state.lastPlans = await computePlans();
+    overlay.classList.remove('show');
+    closeAllPages();
+    openPage('pageResults');
+    document.getElementById('resultsSubnav').classList.add('show');
+    renderResultsView('allChains');
+  });
 }
-
-function updateFloatCompareBtn() {
-  let btn = document.getElementById('floatCompareBtn');
-  if (state.cart.size === 0) { btn?.remove(); return; }
-  if (!btn) {
-    btn = document.createElement('button');
-    btn.id = 'floatCompareBtn'; btn.className = 'float-compare'; btn.textContent = 'קח אותי להשוואה';
-    document.body.appendChild(btn);
-    btn.onclick = async () => {
-      const overlay = document.getElementById('computeOverlay');
-      overlay.classList.add('show');
-      const plans = await computePlans();
-      overlay.classList.remove('show');
-      const host = document.getElementById('plansHost');
-      if (host) renderComparisonResults(plans, host);
-    };
-  }
-  btn.style.display = document.getElementById('pageCart').classList.contains('open') ? 'block' : 'none';
-}
-new MutationObserver(updateFloatCompareBtn).observe(document.getElementById('pageCart'), { attributes: true, attributeFilter: ['class'] });
 
 function notebookHtml(group, title, sub) {
   return `<div class="notebook">
@@ -759,39 +832,79 @@ function nbLineHtml(l) {
   return `<div class="nb-line"><div class="l"><div class="thumb-sm">${l.image ? `<img src="${l.image}">` : `<i class="ti ${guessIcon(l.name)}"></i>`}</div><div class="nm">${l.name} × ${l.qty}${l.isWeighted ? ' ק״ג' : ''}</div></div><div class="pr">${price != null ? price.toFixed(2) + ' ₪' : '—'}</div></div>`;
 }
 
-function renderComparisonResults({ single, allStores, splitUnlimited, splitCapped }, host) {
-  let html = '';
-  if (single) html += notebookHtml(single, `רשימה ל${single.chainName}`, `${single.storeName} · הזול ביותר בחנות אחת`);
-  html += `<div class="split-choice">
-    <button id="showAllStoresBtn"><i class="ti ti-building-store"></i><span>הצג רשימות לכל הרשתות</span></button>
-    <button id="showSplitBtn"><i class="ti ti-arrows-split"></i><span>פיצול מקסימלי</span></button>
-  </div><div id="resultsExtra"></div>`;
-  host.innerHTML = html;
+/* ======================= עמוד תוצאות - מלא, לא שכבה ======================= */
+document.querySelectorAll('.results-subnav button[data-view]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.results-subnav button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  renderResultsView(b.dataset.view);
+});
 
-  document.getElementById('showAllStoresBtn').onclick = () => {
-    document.getElementById('resultsExtra').innerHTML = allStores.map(g => notebookHtml(g, `אם קונים הכל ב${g.chainName}`, g.storeName)).join('');
-  };
-  document.getElementById('showSplitBtn').onclick = () => {
-    const extra = document.getElementById('resultsExtra');
-    extra.innerHTML = `
+function renderResultsView(view) {
+  const content = document.getElementById('resultsContent');
+  const { allChains, splitUnlimited, splitCapped } = state.lastPlans;
+  if (view === 'allChains') {
+    if (!allChains.length) { content.innerHTML = '<div class="empty">לא נמצא מחיר לאף מוצר ברשימה.</div>'; return; }
+    content.innerHTML = `
+      <div class="results-grid">${allChains.map((g, i) => chainNotebookHtml(g, `רשת ${g.chainName}`, g.missing.length ? `חסרים ${g.missing.length} פריטים` : 'הרשימה המלאה זמינה כאן', i)).join('')}</div>
+      <button class="btn" id="showTableBtn" style="width:100%;margin-top:16px;padding:13px;"><i class="ti ti-table"></i> הצג טבלת השוואה</button>
+      <div id="tableHost"></div>`;
+    wireNotebookTaps(allChains.map(g => ({ title: `רשת ${g.chainName}`, group: g })));
+    document.getElementById('showTableBtn').onclick = () => renderCompareTable(allChains);
+  } else {
+    content.innerHTML = `
       <div class="split-control"><span style="font-size:12px;color:var(--ink-dim);">להגביל ל</span><input type="range" min="1" max="5" value="${state.maxStores}" id="splitRange"><b id="splitVal">${state.maxStores >= 5 ? 'ללא הגבלה' : state.maxStores}</b></div>
-      <div id="splitGroupsHost">${splitUnlimited.groups.map(g => notebookHtml(g, `רשימה ל${g.chainName}`, g.storeName)).join('')}
-        <div class="notebook" style="background:var(--neutral-highlight);box-shadow:none;"><div class="nb-total-row"><span style="font-size:13px;">סה״כ כולל (${splitUnlimited.groups.length} חנויות)</span><b>${splitUnlimited.total.toFixed(2)} ₪</b></div>${splitUnlimited.missing.length ? `<div class="missing-note">לא נמצא מחיר עבור: ${splitUnlimited.missing.join(', ')}</div>` : ''}</div></div>`;
+      <div class="results-grid" id="splitGroupsHost"></div>
+      <div class="notebook" style="background:var(--neutral-highlight);box-shadow:none;" id="splitTotalBox"></div>`;
+    renderSplitGroups(splitUnlimited);
     document.getElementById('splitRange').oninput = (e) => {
       state.maxStores = Number(e.target.value);
-      const label = document.getElementById('splitVal'); const gh = document.getElementById('splitGroupsHost');
-      if (state.maxStores >= 5) { label.textContent = 'ללא הגבלה'; gh.innerHTML = splitUnlimited.groups.map(g => notebookHtml(g, `רשימה ל${g.chainName}`, g.storeName)).join('') + `<div class="notebook" style="background:var(--neutral-highlight);box-shadow:none;"><div class="nb-total-row"><span style="font-size:13px;">סה״כ כולל (${splitUnlimited.groups.length} חנויות)</span><b>${splitUnlimited.total.toFixed(2)} ₪</b></div></div>`; return; }
-      label.textContent = state.maxStores;
-      const capped = splitCapped(state.maxStores);
-      gh.innerHTML = capped ? capped.groups.map(g => notebookHtml(g, `רשימה ל${g.chainName}`, g.storeName)).join('') + `<div class="notebook" style="background:var(--neutral-highlight);box-shadow:none;"><div class="nb-total-row"><span style="font-size:13px;">סה״כ כולל</span><b>${capped.total.toFixed(2)} ₪</b></div></div>` : '<div class="empty">אין קומבינציה שמכסה את הכל במגבלה הזו</div>';
+      document.getElementById('splitVal').textContent = state.maxStores >= 5 ? 'ללא הגבלה' : state.maxStores;
+      renderSplitGroups(state.maxStores >= 5 ? splitUnlimited : splitCapped(state.maxStores));
     };
-  };
+  }
+}
+function renderSplitGroups(result) {
+  const gh = document.getElementById('splitGroupsHost'); const tb = document.getElementById('splitTotalBox');
+  if (!result) { gh.innerHTML = '<div class="empty">אין קומבינציה שמכסה את הכל במגבלה הזו</div>'; tb.innerHTML = ''; return; }
+  gh.innerHTML = result.groups.map((g, i) => chainNotebookHtml(g, `רשת ${g.chainName}`, '', i)).join('');
+  wireNotebookTaps(result.groups.map(g => ({ title: `רשת ${g.chainName}`, group: g })));
+  tb.innerHTML = `<div class="nb-total-row"><span style="font-size:13px;">סה״כ כולל (${result.groups.length} רשתות)</span><b>${result.total.toFixed(2)} ₪</b></div>${result.missing && result.missing.length ? `<div class="missing-note">לא נמצא מחיר עבור: ${result.missing.join(', ')}</div>` : ''}`;
+}
+function chainNotebookHtml(group, title, sub, idx) { return `<div data-notebook-idx="${idx}" style="cursor:pointer;">${notebookHtml(group, title, sub)}</div>`; }
+function wireNotebookTaps(entries) {
+  document.querySelectorAll('[data-notebook-idx]').forEach(el => el.onclick = () => openChainShoppingView(entries, Number(el.dataset.notebookIdx)));
 }
 
-function openShopMode(lines) {
+function renderCompareTable(allChains) {
+  const items = [...state.cart.values()];
+  const rows = items.map(({ product }) => {
+    const cells = allChains.map(g => {
+      const line = g.lines.find(l => l.name === product.canonical_name);
+      if (!line || !line.offer) return `<td class="na">לא זמין</td>`;
+      const price = product.is_weighted && line.offer.unitPrice ? line.offer.unitPrice : line.offer.price;
+      return `<td>${price.toFixed(2)} ₪</td>`;
+    }).join('');
+    return `<tr><td>${product.canonical_name}</td>${cells}</tr>`;
+  }).join('');
+  document.getElementById('tableHost').innerHTML = `<div class="table-wrap"><table class="compare-table">
+    <thead><tr><th></th>${allChains.map(g => `<th>${g.chainName}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+/* ======================= מצב קניה במסך מלא - עם מעבר בין הרשימות ======================= */
+function openChainShoppingView(entries, index) {
   const content = document.getElementById('shopContent');
-  content.innerHTML = `<div id="shopList">${lines.map((l, i) => `<div class="shop-item" data-i="${i}"><div class="shop-check"></div><div class="thumb-sm">${l.image ? `<img src="${l.image}">` : `<i class="ti ${guessIcon(l.name)}"></i>`}</div><div class="nm" style="flex:1;font-size:13px;">${l.name} × ${l.qty}${l.isWeighted ? ' ק״ג' : ''}</div></div>`).join('')}</div>`;
-  content.querySelectorAll('.shop-item').forEach(row => row.onclick = () => row.classList.toggle('done'));
+  function render(i) {
+    const { title, group } = entries[i];
+    content.innerHTML = `
+      <button class="shop-close" id="shopCloseBtn"><i class="ti ti-x"></i></button>
+      <div style="padding-top:10px;">${notebookHtml(group, title, '')}</div>
+      ${entries.length > 1 ? `<div class="shop-switcher">${entries.map((e, j) => `<button class="${j === i ? 'active' : ''}" data-switch="${j}">${e.title}</button>`).join('')}</div>` : ''}`;
+    content.querySelectorAll('.nb-line').forEach(row => row.onclick = () => row.classList.toggle('done-line'));
+    document.getElementById('shopCloseBtn').onclick = () => { closeAllPages(); openPage('pageResults'); document.getElementById('resultsSubnav').classList.add('show'); };
+    content.querySelectorAll('[data-switch]').forEach(b => b.onclick = () => render(Number(b.dataset.switch)));
+  }
+  render(index);
   closeAllPages(); openPage('pageShop');
 }
 
@@ -978,6 +1091,7 @@ loadInitial();
 checkSiteBanner();
 renderLastSync();
 syncHeaderHeight();
+populateSearchScope();
 </script>
 </body>
 </html>
