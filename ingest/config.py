@@ -1,18 +1,13 @@
 """
-רישום הרשתות שהמערכת יודעת למשוך מהן.
-זה קובץ שאתה תעדכן ותרחיב עם הזמן — אין הגבלה מובנית על כמות הרשתות.
+רישום הרשתות. הוספת רשת = שורה אחת כאן, בלי שינוי ארכיטקטורה.
 
-שלושת סוגי הפורטלים שקיימים בפועל:
-  - "shufersal_direct"  — לרשת שופרסל יש פורטל שקיפות עצמאי משלה.
-  - "carrefour_direct"  — לקרפור יש פורטל עצמאי דומה.
-  - "cerberus"           — פורטל משותף (publishedprices.co.il) שמארח עשרות
-                            רשתות קטנות/בינוניות, כולל רמי לוי ואחרות.
-                            כל רשת מקבלת שם משתמש משלה על אותו פורטל.
+verified=True  : אומת בהרצה אמיתית. כשל ברשת כזו מכשיל את הריצה (מייל התראה מ-GitHub).
+verified=False : שם המשתמש בפורטל המשותף ידוע לי מפרויקטי קוד פתוח של שקיפות מחירים,
+                 אבל לא נבדק אצלנו. אם הוא שגוי - הרשת פשוט מדולגת עם אזהרה בלוג,
+                 והריצה ממשיכה. תראה בלוג איזו רשת הצליחה ואיזו לא, ונתקן.
 
-הערה חשובה: לא בדקתי בעצמי את המבנה המדויק העדכני של כל פורטל (אין לי
-גישת רשת מה-sandbox), כתבתי לפי המבנה המתועד/הידוע של המערכת הזו. בהרצה
-הראשונה אצלך תצטרך לוודא/לתקן פרטים קטנים (שם שדה, נתיב URL) מול הפורטל
-בפועל — ה-log ידפיס בדיוק איפה זה נכשל אם משהו לא תואם.
+הפורטל המשותף (cerberus) מארח כ-13 רשתות; לרשתות עם פורטל עצמאי אחר
+(קרפור, סופר-פארם, ויקטורי, חצי חינם ועוד) צריך אדפטר נפרד - ראה README.
 """
 
 from dataclasses import dataclass, field
@@ -23,49 +18,30 @@ class ChainConfig:
     id: str
     display_name: str
     portal_type: str
-    # לפורטל cerberus: שם המשתמש הספציפי של הרשת באותו פורטל משותף
     portal_username: str = ""
     active: bool = True
+    verified: bool = True
     extra: dict = field(default_factory=dict)
 
 
 CHAINS: list[ChainConfig] = [
-    ChainConfig(
-        id="shufersal",
-        display_name="שופרסל",
-        portal_type="shufersal_direct",
-    ),
-    ChainConfig(
-        id="carrefour",
-        display_name="קרפור (יינות ביתן לשעבר) - מושבת זמנית",
-        portal_type="carrefour_direct",
-        active=False,  # הפורטל שלהם דורש אינטראקציה, לא רק href סטטי - עוד לא פתרנו
-    ),
-    ChainConfig(
-        id="rami-levy",
-        display_name="רמי לוי",
-        portal_type="cerberus",
-        portal_username="RamiLevi",
-    ),
-    ChainConfig(
-        id="victory",
-        display_name="ויקטורי - מושבת זמנית",
-        portal_type="cerberus",
-        portal_username="victory",
-        active=False,  # שם המשתמש בפורטל לא אומת עדיין - חוזרת עם דף login גולמי
-    ),
-    ChainConfig(
-        id="osherad",
-        display_name="אושר עד",
-        portal_type="cerberus",
-        portal_username="osherad",
-    ),
-    ChainConfig(
-        id="yohananof",
-        display_name="יוחננוף",
-        portal_type="cerberus",
-        portal_username="yohananof",
-    ),
-    # הוסף עוד רשתות כאן באותו תבנית. כל רשת נוספת = עוד כמה שורות, לא
-    # ארכיטקטורה חדשה.
+    # --- מאומתות ---
+    ChainConfig("shufersal", "שופרסל", "shufersal_direct"),
+    ChainConfig("rami-levy", "רמי לוי", "cerberus", "RamiLevi"),
+    ChainConfig("osherad", "אושר עד", "cerberus", "osherad"),
+    ChainConfig("yohananof", "יוחננוף", "cerberus", "yohananof"),
+    # --- הפורטל המשותף, שמות משתמש לא מאומתים אצלנו ---
+    ChainConfig("tiv-taam", "טיב טעם", "cerberus", "TivTaam", verified=False),
+    ChainConfig("keshet-teamim", "קשת טעמים", "cerberus", "Keshet", verified=False),
+    ChainConfig("politzer", "פוליצר", "cerberus", "politzer", verified=False),
+    ChainConfig("stop-market", "סטופ מרקט", "cerberus", "Stop_Market", verified=False),
+    ChainConfig("salach-dabach", "סלאח דבאח", "cerberus", "SalachD", verified=False),
+    ChainConfig("super-yuda", "סופר יודה", "cerberus", "yuda_ho", verified=False),
+    ChainConfig("fresh-market", "פרש מרקט", "cerberus", "freshmarket", verified=False),
+    ChainConfig("dor-alon", "אלונית (דור אלון)", "cerberus", "doralon", verified=False),
+    ChainConfig("super-cofix", "סופר קופיקס", "cerberus", "SuperCofixApp", verified=False),
+    ChainConfig("yellow", "ילו", "cerberus", "Yellow", verified=False),
+    # --- מושבתות ---
+    ChainConfig("victory", "ויקטורי", "cerberus", "victory", active=False, verified=False),
+    ChainConfig("carrefour", "קרפור", "carrefour_direct", active=False, verified=False),
 ]

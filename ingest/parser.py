@@ -1,12 +1,9 @@
 """
-פרסר גנרי לקבצי ה-XML של חוק שקיפות המחירים.
+פרסר זורם (iterparse) לקובצי XML של חוק שקיפות המחירים.
 
-התקנות מגדירות מבנה קבוע (מסמך "פרסום נתוני מחירים לצרכן"): קובץ חנויות,
-קובץ פריטים/מחירים וקובץ מבצעים, כל אחד ב-XML. חלק מהרשתות דוחסות ב-gzip
-וחלקן (רמי לוי, בפועל) ב-zip רגיל - הפונקציה decompress מטפלת בשניהם.
-השמות המדויקים של התגיות (tags) משתנים מעט בין רשת לרשת (יש כמה "דיאלקטים"
-נפוצים) - לכן הפונקציות כאן מחפשות כמה שמות אפשריים לכל שדה במקום להניח
-תג אחד קשיח, כדי שיעבדו על כמה שיותר רשתות בלי שינוי.
+- קבצים יכולים להיות gzip, zip (רמי לוי) או XML גולמי; בקידוד UTF-8/16 וכו'.
+- שמות תגיות משתנים בין רשתות (רישיות, namespace) - הכל מנורמל ל-lowercase.
+- iterparse מונע טעינה של קובץ של עשרות מגה לזיכרון בבת אחת.
 """
 
 from __future__ import annotations
@@ -14,8 +11,9 @@ from __future__ import annotations
 import gzip
 import io
 import zipfile
-from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal, InvalidOperation
+from typing import Iterator, NamedTuple
 from xml.etree import ElementTree as ET
 
 
@@ -28,145 +26,151 @@ def decompress(payload: bytes) -> bytes:
             if not names:
                 raise ValueError("zip archive is empty")
             return zf.read(names[0])
-    return payload  # לא דחוס - XML גולמי
+    return payload
 
 
-# שם ישן שנשאר לתאימות לאחור עם קוד שכבר קורא לו
-ungzip_if_needed = decompress
+def _local(tag) -> str:
+    return tag.rsplit("}", 1)[-1].lower() if isinstance(tag, str) else ""
 
 
-def _decode_xml(payload: bytes) -> str:
-    if payload[:2] == b"\xff\xfe":
-        return payload.decode("utf-16-le")
-    if payload[:2] == b"\xfe\xff":
-        return payload.decode("utf-16-be")
-    return payload.decode("utf-8", errors="replace")
-
-
-def _first_text(item: ET.Element, *names: str) -> str | None:
-    for name in names:
-        el = item.find(name)
-        if el is not None and el.text is not None and el.text.strip() != "":
-            return el.text.strip()
-    return None
-
-
-def _to_decimal(value: str | None) -> Decimal | None:
-    if value is None:
+def _dec(value) -> Decimal | None:
+    if value is None or value == "":
         return None
     try:
-        return Decimal(value.replace(",", "").strip())
+        return Decimal(str(value).replace(",", "").strip())
     except InvalidOperation:
         return None
 
 
-def _to_bool(value: str | None) -> bool:
-    return value is not None and value.strip() in ("1", "true", "True")
+def _bool(value) -> bool:
+    return value is not None and str(value).strip().lower() in ("1", "true")
 
 
-@dataclass
-class ParsedStore:
+# ------------------------------ ברקוד ------------------------------
+
+def norm_gtin(code) -> str | None:
+    """מנרמל ברקוד לצורה אחידה בין רשתות (EAN-13/GTIN-14, בלי תלות באפסים מובילים)."""
+    c = (code or "").strip()
+    if not c.isdigit():
+        return None
+    c = c.lstrip("0")
+    if not (7 <= len(c) <= 14):
+        return None
+    return c.zfill(13) if len(c) <= 13 else c.zfill(14)
+
+
+def to_gtin(code, itemtype, weighted) -> str | None:
+    """האם הפריט הזה הוא מוצר עם ברקוד אמיתי? (ItemType=1 לפי הסכמה הרשמית)."""
+    if weighted or itemtype == "0":
+        return None
+    c = (code or "").strip()
+    min_len = 8 if itemtype == "1" else 12
+    if not c.isdigit() or len(c) < min_len:
+        return None
+    return norm_gtin(c)
+
+
+# ------------------------------ מחירים ------------------------------
+
+class PriceRow(NamedTuple):
+    code: str
+    name: str
+    price: Decimal
+    unit_price: Decimal | None
+    unit: str | None
+    weighted: bool
+    itemtype: str | None
+
+
+def iter_price_rows(payload: bytes) -> Iterator[PriceRow]:
+    for _ev, el in ET.iterparse(io.BytesIO(decompress(payload)), events=("end",)):
+        if _local(el.tag) not in ("item", "product"):
+            continue
+        f = {_local(c.tag): (c.text or "").strip() for c in el}
+        el.clear()
+        code = f.get("itemcode")
+        name = f.get("itemname") or f.get("manufactureritemdescription")
+        price = _dec(f.get("itemprice"))
+        if not code or not name or price is None or price <= 0:
+            continue
+        yield PriceRow(
+            code=code,
+            name=name,
+            price=price,
+            unit_price=_dec(f.get("unitofmeasureprice")),
+            unit=f.get("unitofmeasure") or None,
+            weighted=_bool(f.get("bisweighted") or f.get("isweighted")),
+            itemtype=f.get("itemtype") or None,
+        )
+
+
+# ------------------------------ סניפים ------------------------------
+
+class ParsedStore(NamedTuple):
     store_id_ext: str
     name: str | None
     city: str | None
     address: str | None
 
 
-@dataclass
-class ParsedPriceItem:
-    chain_item_code: str
-    item_name: str
-    gtin: str | None
-    price: Decimal
-    unit_of_measure_price: Decimal | None
-    unit_of_measure: str | None
-    is_weighted: bool
-    manufacturer: str | None
-    store_id_ext: str | None  # לפעמים הקובץ הוא per-store, ואז זה קבוע מבחוץ
-
-
-@dataclass
-class ParsedPromoItem:
-    chain_item_code: str
-    description: str | None
-    promo_price: Decimal | None
-    club_required: bool
-
-
 def parse_stores_file(payload: bytes) -> list[ParsedStore]:
-    root = ET.fromstring(_decode_xml(decompress(payload)))
     out: list[ParsedStore] = []
-    for store in root.iter():
-        if store.tag not in ("Store", "STORE"):
+    for _ev, el in ET.iterparse(io.BytesIO(decompress(payload)), events=("end",)):
+        if _local(el.tag) != "store":
             continue
-        store_id = _first_text(store, "StoreId", "STOREID", "StoreID")
-        if not store_id:
-            continue
-        out.append(
-            ParsedStore(
-                store_id_ext=store_id,
-                name=_first_text(store, "StoreName", "STORENAME"),
-                city=_first_text(store, "City", "CITY"),
-                address=_first_text(store, "Address", "ADDRESS"),
-            )
-        )
+        f = {_local(c.tag): (c.text or "").strip() for c in el}
+        el.clear()
+        sid = f.get("storeid")
+        if sid:
+            out.append(ParsedStore(sid, f.get("storename") or None, f.get("city") or None, f.get("address") or None))
     return out
 
 
-def parse_price_file(payload: bytes, default_store_id: str | None = None) -> list[ParsedPriceItem]:
-    root = ET.fromstring(_decode_xml(decompress(payload)))
-    out: list[ParsedPriceItem] = []
-    for item in root.iter():
-        if item.tag not in ("Item", "ITEM", "Product"):
+# ------------------------------ מבצעים ------------------------------
+
+class PromoRow(NamedTuple):
+    code: str
+    description: str | None
+    price_each: Decimal   # מחיר ליחידה (במבצע "2 ב-10" -> 5)
+    club: bool
+
+
+def iter_promo_rows(payload: bytes, today: date | None = None) -> Iterator[PromoRow]:
+    today = today or date.today()
+    for _ev, el in ET.iterparse(io.BytesIO(decompress(payload)), events=("end",)):
+        if _local(el.tag) != "promotion":
             continue
-        code = _first_text(item, "ItemCode", "ITEMCODE")
-        name = _first_text(item, "ItemName", "ITEMNAME")
-        price = _to_decimal(_first_text(item, "ItemPrice", "ITEMPRICE"))
-        if not code or not name or price is None:
-            continue  # רשומה חסרה/פגומה - מדלגים ולא מפילים את כל הריצה
+        f: dict[str, str] = {}
+        codes: list[str] = []
+        club = False
+        for c in el:
+            t = _local(c.tag)
+            if t in ("promotionitems", "items"):
+                for it in c:
+                    for cc in it:
+                        if _local(cc.tag) == "itemcode" and (cc.text or "").strip():
+                            codes.append(cc.text.strip())
+            elif t == "clubs":
+                for cc in c:
+                    if _local(cc.tag) == "clubid" and (cc.text or "").strip() not in ("", "0"):
+                        club = True
+            else:
+                f[t] = (c.text or "").strip()
+        el.clear()
 
-        is_weighted = _to_bool(_first_text(item, "bIsWeighted", "BIsWeighted", "ItemIsWeighted"))
-
-        out.append(
-            ParsedPriceItem(
-                chain_item_code=code,
-                item_name=name,
-                gtin=code if (code.isdigit() and len(code) in (12, 13, 14) and not is_weighted) else None,
-                price=price,
-                unit_of_measure_price=_to_decimal(
-                    _first_text(item, "UnitOfMeasurePrice", "UNITOFMEASUREPRICE")
-                ),
-                unit_of_measure=_first_text(item, "UnitOfMeasure", "UNITOFMEASURE"),
-                is_weighted=is_weighted,
-                manufacturer=_first_text(item, "ManufacturerName", "MANUFACTURERNAME"),
-                store_id_ext=_first_text(item, "StoreId", "STOREID") or default_store_id,
-            )
-        )
-    return out
-
-
-def parse_promo_file(payload: bytes) -> list[ParsedPromoItem]:
-    root = ET.fromstring(_decode_xml(decompress(payload)))
-    out: list[ParsedPromoItem] = []
-    for promo in root.iter():
-        if promo.tag not in ("Promotion", "PROMOTION", "Sale"):
-            continue
-        for item in promo.iter():
-            if item.tag not in ("Item", "ITEM", "PromotionItem"):
+        price = _dec(f.get("discountedprice"))
+        if price is None or price <= 0 or not codes:
+            continue  # מבצעי אחוזים ללא מחיר מפורש - לא מנחשים
+        end = f.get("promotionenddate", "")[:10]
+        try:
+            if end and date.fromisoformat(end) < today:
                 continue
-            code = _first_text(item, "ItemCode", "ITEMCODE")
-            if not code:
-                continue
-            out.append(
-                ParsedPromoItem(
-                    chain_item_code=code,
-                    description=_first_text(promo, "PromotionDescription", "PROMOTIONDESCRIPTION"),
-                    promo_price=_to_decimal(
-                        _first_text(promo, "DiscountedPrice", "DISCOUNTEDPRICE")
-                    ),
-                    club_required=_to_bool(
-                        _first_text(promo, "ClubOnly", "IsClubMemberPrice")
-                    ),
-                )
-            )
-    return out
+        except ValueError:
+            pass
+        qty = _dec(f.get("minqty")) or Decimal(1)
+        each = (price / qty).quantize(Decimal("0.01")) if qty > 1 else price
+        if f.get("clubid", "") not in ("", "0"):
+            club = True
+        desc = f.get("promotiondescription") or None
+        for code in codes:
+            yield PromoRow(code, desc, each, club)

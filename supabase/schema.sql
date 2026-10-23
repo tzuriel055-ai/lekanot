@@ -86,9 +86,55 @@ create index if not exists idx_prices_store on prices(store_id);
 create index if not exists idx_prices_product on prices(product_id);
 create index if not exists idx_stores_chain on stores(chain_id);
 
+-- משוב מהעמוד "עזרו לנו להשתפר"
+create table if not exists feedback (
+  id uuid primary key default gen_random_uuid(),
+  message text not null,
+  created_at timestamptz not null default now()
+);
+alter table feedback enable row level security;
+-- כל אחד יכול לשלוח משוב. הערה חשובה: כל אחד גם יכול *לקרוא* משוב דרך
+-- ה-API הזה כרגע, כי אין עדיין מערכת הרשאות אמיתית (admin אמיתי) -
+-- פאנל הניהול באתר פשוט קורא מאותה טבלה עם אותו מפתח anon. זה בסדר
+-- לשלב הזה (אין בפניות מידע רגיש), אבל כדאי לדעת שזו לא הגנה אמיתית.
+create policy "public insert feedback" on feedback for insert with check (true);
+create policy "public read feedback" on feedback for select using (true);
+
+-- הודעת מערכת שמוצגת לכולם בראש האתר
+create table if not exists site_banner (
+  id integer primary key,
+  message text not null default '',
+  active boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+insert into site_banner (id, message, active) values (1, '', false)
+  on conflict (id) do nothing;
+alter table site_banner enable row level security;
+-- קריאה פתוחה לכולם (כדי שהבאנר יוצג), אבל *אין* policy לכתיבה דרך
+-- anon בכוונה - עדכון הבאנר מהאתר דורש הדבקת מפתח service_role אמיתי
+-- (עוקף RLS), כדי שלא כל מבקר יוכל לשנות את ההודעה לכל האתר.
+create policy "public read banner" on site_banner for select using (true);
+
 -- אינדקס חיפוש טקסט חופשי בעברית (פשוט, ILIKE-friendly)
 create extension if not exists pg_trgm;
 create index if not exists idx_products_name on products using gin (canonical_name gin_trgm_ops);
+
+-- חיפוש "חכם" שסובל שגיאות כתיב, בלי שום AI - משתמש ב-pg_trgm שכבר הפעלנו
+-- למעלה. דומה (similarity) למילה שחיפשת, גם אם היא לא זהה באות-באות.
+create or replace function search_products_fuzzy(q text, match_limit int default 60)
+returns setof products
+language sql stable
+as $$
+  select *
+  from products
+  where canonical_name ilike '%' || q || '%'
+     or similarity(canonical_name, q) > 0.25
+  order by
+    (canonical_name ilike '%' || q || '%') desc,  -- התאמה מדויקת תמיד קודם
+    similarity(canonical_name, q) desc
+  limit match_limit;
+$$;
+grant execute on function search_products_fuzzy(text, int) to anon, authenticated;
 
 -- ===== הרשאות =====
 -- ה-frontend בדפדפן משתמש במפתח "anon" הציבורי (בטוח לחשיפה, זה כל הרעיון
@@ -113,3 +159,27 @@ create policy "public read promos" on promos for select using (true);
 -- אימות מחיר בסניף: כל אחד יכול "לדווח", אף אחד לא יכול לקרוא דיווחים גולמיים
 -- של אחרים דרך ה-anon key (רק את המצטבר, שנחשב דרך view נפרד בהמשך).
 create policy "public insert confirmations" on price_confirmations for insert with check (true);
+
+-- ===================== v3: קטלוג מלא ברמת רשת =====================
+-- לכל (מוצר, רשת) שורה אחת ב-prices (מול "סניף" וירטואלי בשם ALL של אותה רשת):
+--   price = המחיר הזול ביותר בין הסניפים, price_max = הגבוה ביותר,
+--   stores_carrying = בכמה סניפים המוצר נמצא, in_stock = האם הופיע בעדכון האחרון.
+-- ככה הקטלוג המלא נכנס ב-500MB החינמיים (מאות אלפי שורות, לא עשרות מיליונים).
+alter table prices add column if not exists price_max numeric(10,2);
+alter table prices add column if not exists stores_carrying integer;
+
+-- סטטוס משיכה לכל רשת: מתי הסתיימה משיכה מלאה לאחרונה, וכמה סניפים/מוצרים.
+create table if not exists ingest_status (
+  chain_id text primary key references chains(id) on delete cascade,
+  last_attempt_at timestamptz,
+  last_complete_at timestamptz,
+  stores_total integer,
+  products_total integer,
+  complete boolean not null default false,
+  note text
+);
+alter table ingest_status enable row level security;
+drop policy if exists "public read ingest_status" on ingest_status;
+create policy "public read ingest_status" on ingest_status for select using (true);
+grant select on ingest_status to anon, authenticated;
+grant select, insert, update, delete on ingest_status to service_role;

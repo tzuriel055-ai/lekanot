@@ -409,6 +409,7 @@ const state = {
   products: [], cheapest: new Map(), cart: new Map(), maxStores: 2, includeDelivery: false,
   settings: lsGet(LS.settings, { location: "", transport: "car", delivery: {} }),
   qtyDraft: new Map(), versionTaps: 0,
+  chainStores: new Map(), // chain_id -> כמה סניפים נסרקו בעדכון האחרון (מ-ingest_status)
 };
 
 /* ======================= חיפוש חכם ======================= */
@@ -431,7 +432,7 @@ function rankProducts(products, term) {
 
 async function fetchCheapestFor(productIds) {
   if (!productIds.length) return new Map();
-  const rows = await sb('prices', { select: 'product_id,price,unit_price', product_id: `in.(${productIds.join(',')})` });
+  const rows = await sb('prices', { select: 'product_id,price,unit_price', product_id: `in.(${productIds.join(',')})`, in_stock: 'eq.true' });
   const map = new Map();
   for (const r of rows) {
     const cur = map.get(r.product_id);
@@ -553,13 +554,13 @@ async function populateSearchScope() {
   } catch {}
 }
 async function fetchPricesForProduct(productId) {
-  return sb('prices', { select: 'id,price,unit_price,in_stock,store_id,product_id,stores(name,city,chain_id,chains(display_name))', product_id: `eq.${productId}` });
+  return sb('prices', { select: 'id,price,price_max,unit_price,in_stock,stores_carrying,store_id,product_id,stores(name,city,chain_id,chains(display_name))', product_id: `eq.${productId}` });
 }
 
 /* ======================= רינדור גריד (ניתן לכוון לכל container) ======================= */
 function priceLineHtml(p, cheapestMap) {
   const c = cheapestMap.get(p.id);
-  if (!c) return `<div class="price-line"><span class="unit">אין מחיר עדיין</span></div>`;
+  if (!c) return `<div class="price-line"><span class="unit">אין במלאי כרגע</span></div>`;
   if (p.is_weighted && c.unitPrice) return `<div class="price-line"><span class="lbl">הכי זול</span>${c.unitPrice.toFixed(2)} ₪ <span class="unit">/ ק״ג</span></div>`;
   return `<div class="price-line"><span class="lbl">הכי זול</span>${c.price.toFixed(2)} ₪</div>`;
 }
@@ -630,16 +631,21 @@ async function openProductSheet(product) {
 
   const offers = await fetchPricesForProduct(product.id);
   const priceOf = (o) => (product.is_weighted && o.unit_price ? Number(o.unit_price) : Number(o.price));
-  const sorted = [...offers].sort((a, b) => priceOf(a) - priceOf(b));
-  const cheapest = sorted[0];
-  const rest = sorted.slice(1);
+  const avail = offers.filter(o => o.in_stock !== false).sort((a, b) => priceOf(a) - priceOf(b));
+  const unavail = offers.filter(o => o.in_stock === false);
+  const sorted = [...avail, ...unavail];
+  const cheapest = avail[0] || null;
+  const rest = cheapest ? sorted.slice(1) : sorted;
   let qty = 1;
 
   function storeRowHtml(o) {
     const price = priceOf(o);
     return `<div class="store-row ${o.id === cheapest?.id ? 'cheapest' : ''}">
-      <div class="names"><b>${o.stores?.chains?.display_name || ''}</b><span>${o.stores?.name || ''} ${o.stores?.city ? '· ' + o.stores.city : ''}</span>
-      ${o.in_stock === false ? '<span class="oos">לא זמין - אין במלאי לפי הדיווח האחרון</span>' : ''}</div>
+      <div class="names"><b>${o.stores?.chains?.display_name || ''}</b>
+      ${o.in_stock === false
+        ? '<span class="oos">אין במלאי - לא הופיע בעדכון האחרון של הרשת</span>'
+        : `${o.stores_carrying != null && state.chainStores.get(o.stores?.chain_id) ? `<span>זמין ב-${o.stores_carrying} מתוך ${state.chainStores.get(o.stores.chain_id)} סניפים</span>` : ''}
+           ${!product.is_weighted && o.price_max && Number(o.price_max) > Number(o.price) ? `<span>טווח מחירים בין הסניפים: ${Number(o.price).toFixed(2)}–${Number(o.price_max).toFixed(2)} ₪</span>` : ''}`}</div>
       <div class="price-col">${o.id === cheapest?.id ? '<span class="tag-cheap">הכי זול</span>' : ''}<b>${price.toFixed(2)} ₪${product.is_weighted ? '<span class="unit"> / ק״ג</span>' : ''}</b></div>
     </div>`;
   }
@@ -656,7 +662,7 @@ async function openProductSheet(product) {
       </div>
     </div>
     <div style="margin-top:16px;">
-      ${cheapest ? storeRowHtml(cheapest) : '<div class="empty">אין עדיין מחיר רשום למוצר הזה.</div>'}
+      ${cheapest ? storeRowHtml(cheapest) : '<div class="empty">המוצר לא הופיע בעדכון האחרון של אף רשת.</div>'}
       ${rest.length ? `<button class="expand-chains" id="expandChainsBtn"><span>הצג את כל הרשתות (${rest.length})</span><i class="ti ti-chevron-down"></i></button><div id="restChains" style="display:none;">${rest.map(storeRowHtml).join('')}</div>` : ''}
       <div class="stock-note">המחירים מתעדכנים לפי קבצי השקיפות הרשמיים של הרשתות ועשויים להיות שונים במעט מהמחיר בקופה בפועל.</div>
     </div>`;
@@ -685,6 +691,7 @@ async function computePlans() {
     const rows = await fetchPricesForProduct(product.id);
     const byChain = new Map();
     for (const r of rows) {
+      if (r.in_stock === false) continue; // לא הופיע בעדכון האחרון של הרשת - לא נכנס להשוואה
       const chainId = r.stores?.chain_id;
       const price = Number(r.price);
       const cur = byChain.get(chainId);
@@ -1068,10 +1075,12 @@ async function checkSiteBanner() {
 /* ======================= סנכרון אחרון - נתון אמיתי מה-DB ======================= */
 async function renderLastSync() {
   try {
-    const rows = await sb('prices', { select: 'updated_at', order: 'updated_at.desc', limit: '1' });
-    if (!rows.length) return;
-    const mins = Math.max(1, Math.round((Date.now() - new Date(rows[0].updated_at).getTime()) / 60000));
-    document.getElementById('syncLabel').textContent = mins < 60 ? `עודכן\nלפני ${mins} דק׳` : `עודכן\nלפני ${Math.round(mins/60)} שע׳`;
+    const rows = await sb('ingest_status', { select: 'chain_id,stores_total,last_complete_at' });
+    state.chainStores = new Map(rows.map(r => [r.chain_id, r.stores_total]));
+    const times = rows.map(r => r.last_complete_at).filter(Boolean).map(t => new Date(t).getTime());
+    if (!times.length) return;
+    const mins = Math.max(1, Math.round((Date.now() - Math.max(...times)) / 60000));
+    document.getElementById('syncLabel').textContent = mins < 60 ? `עודכן\nלפני ${mins} דק׳` : `עודכן\nלפני ${Math.round(mins / 60)} שע׳`;
   } catch {}
 }
 setInterval(renderLastSync, 5 * 60 * 1000);

@@ -1,25 +1,38 @@
 """
-הרצה: python -m ingest.main
-(או שזה מה ש-GitHub Actions מריץ אוטומטית לפי .github/workflows/ingest.yml)
+משיכה יומית של *כל* הקטלוג מכל הרשתות, בלי עלות.
 
-עובר על כל הרשתות המוגדרות ב-config.py, מושך את הקבצים העדכניים ביותר שלהן,
-מפרק אותם, וכותב הכל ל-Supabase: חנויות, מוצרים (עם matching לפי ברקוד),
-מחירים ומבצעים.
+  python -m ingest.main
 
-עיצוב מכוון: כל רשת רצה בבלוק try/except נפרד — רשת אחת שנופלת (שינוי
-פורטל, תקלה זמנית) לא מפילה את כל הריצה של שאר הרשתות.
+העקרונות (כולם נובעים מהמגבלה שאנחנו על שכבות חינמיות, לתמיד):
+
+1. רק קובצי PriceFull / PromoFull (הקטלוג המלא). קובצי Price/Promo הם עדכוני
+   שינויים בלבד - הם גרמו לנתונים החלקיים עד עכשיו.
+2. הנתונים נשמרים *ברמת רשת*, לא ברמת סניף: לכל (מוצר, רשת) שורה אחת עם המחיר
+   הזול ביותר בין הסניפים, המחיר הגבוה ביותר, ובכמה סניפים המוצר נמצא.
+   הקטלוג המלא ברמת סניף היה מגיע לעשרות מיליוני שורות וחורג מ-500MB החינמיים
+   של Supabase; ברמת רשת זה מאות אלפי שורות בלבד. וזה גם מה שההשוואה צריכה.
+3. כתיבה בבאצ'ים, ורק של מה ששונה מאז הריצה הקודמת.
+4. "אין במלאי" = המוצר לא הופיע באף קובץ PriceFull של הרשת בעדכון האחרון.
+   מסמנים את זה *רק* אם כל הקבצים של הרשת נמשכו בהצלחה - אחרת לא נוגעים,
+   כדי לא להציג "אין במלאי" שלא נובע באמת מהקבצים.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from . import db
 from .config import CHAINS, ChainConfig
-from .parser import parse_price_file, parse_promo_file, parse_stores_file
+from .parser import iter_price_rows, iter_promo_rows, norm_gtin, parse_stores_file, to_gtin
+from .sources.base import PortalAccessError, select_latest
 from .sources.carrefour import CarrefourAdapter
 from .sources.cerberus import CerberusAdapter
 from .sources.shufersal import ShufersalAdapter
@@ -27,10 +40,10 @@ from .sources.shufersal import ShufersalAdapter
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ingest")
 
-# מגבלות ריצה: אפשר להרחיב עוד יותר בהמשך דרך env ב-workflow, בלי לגעת בקוד.
-MAX_PRICE_FILES = int(os.environ.get("MAX_PRICE_FILES_PER_CHAIN", "5"))
-MAX_ITEMS = int(os.environ.get("MAX_ITEMS_PER_FILE", "1000"))
-MAX_PROMO_FILES = int(os.environ.get("MAX_PROMO_FILES_PER_CHAIN", "5"))
+WORKERS = int(os.environ.get("INGEST_WORKERS", "4"))
+PRUNE_DAYS = 30           # מוצר שלא נראה 30 יום נמחק מהטבלה (שומר על הגודל חסום)
+SUSPICIOUS_DROP = 0.5     # אם פחות מ-50% מהמוצרים הקיימים הופיעו - לא מסמנים "אין במלאי"
+_Q = Decimal("0.01")
 
 
 def build_adapter(chain: ChainConfig):
@@ -43,216 +56,347 @@ def build_adapter(chain: ChainConfig):
     raise ValueError(f"unknown portal_type: {chain.portal_type}")
 
 
-def run_chain(chain: ChainConfig) -> None:
-    log.info("=== %s (%s) ===", chain.display_name, chain.id)
-    db.upsert(
-        "chains",
-        [{"id": chain.id, "display_name": chain.display_name, "portal_type": chain.portal_type}],
-        on_conflict="id",
-    )
+def _clean(name: str) -> str:
+    return re.sub(r"\s+", " ", name).strip()[:200]
 
-    adapter = build_adapter(chain)
-    files = list(adapter.list_files())
-    log.info("found %d files", len(files))
 
-    # לוקחים רק את הקובץ העדכני ביותר מכל סוג/סניף (הרשימה כבר ממוינת time desc)
-    latest: dict[tuple[str, str | None], object] = {}
-    for ref in files:
-        key = (ref.kind, ref.store_id_ext)
-        if key not in latest:
-            latest[key] = ref
+def _q(x) -> Decimal | None:
+    return None if x is None else Decimal(str(x)).quantize(_Q)
 
-    store_uuid_by_ext: dict[str, str] = {}
 
-    # 1) חנויות
-    for ref in [r for (kind, _), r in latest.items() if kind == "stores"]:
-        payload = adapter.download(ref)
-        stores = parse_stores_file(payload)
-        rows = [
-            {
-                "chain_id": chain.id,
-                "store_id_ext": s.store_id_ext,
-                "name": s.name,
-                "city": s.city,
-                "address": s.address,
-            }
-            for s in stores
-        ]
-        saved = db.upsert("stores", rows, on_conflict="chain_id,store_id_ext")
-        for row in saved:
-            store_uuid_by_ext[row["store_id_ext"]] = row["id"]
-        log.info("stores: upserted %d", len(saved))
+# ------------------------------ אגרגציה ------------------------------
 
-    # 2) מחירים (ומוצרים כתוצר לוואי - upsert לפי gtin או alias)
-    price_files_done = 0
-    for (kind, store_ext), ref in latest.items():
-        if kind != "prices":
+class ItemAgg:
+    __slots__ = ("gtin", "code", "name", "weighted", "pmin", "pmax", "umin", "unit", "count")
+
+    def __init__(self, gtin, code, name, weighted, price, unit_price, unit):
+        self.gtin, self.code, self.name, self.weighted = gtin, code, name, weighted
+        self.pmin = self.pmax = price
+        self.umin, self.unit, self.count = unit_price, unit, 1
+
+    def merge(self, price, unit_price):
+        self.count += 1
+        if price < self.pmin:
+            self.pmin = price
+        if price > self.pmax:
+            self.pmax = price
+        if unit_price is not None and (self.umin is None or unit_price < self.umin):
+            self.umin = unit_price
+
+
+def add_file(agg: dict[str, ItemAgg], rows) -> None:
+    """מוסיף קובץ של סניף אחד לאגרגציה של הרשת (כל מוצר נספר פעם אחת לסניף)."""
+    seen: set[str] = set()
+    for r in rows:
+        gtin = to_gtin(r.code, r.itemtype, r.weighted)
+        key = gtin or "c:" + r.code
+        if key in seen:
             continue
-        if price_files_done >= MAX_PRICE_FILES:
-            break
-        price_files_done += 1
-        payload = adapter.download(ref)
-        items = parse_price_file(payload, default_store_id=store_ext)[:MAX_ITEMS]
-        log.info("prices file %s: %d items", ref.label, len(items))
-
-        store_uuid = store_uuid_by_ext.get(items[0].store_id_ext) if items else None
-        if store_uuid is None and items and items[0].store_id_ext:
-            # החנות לא הופיעה בקובץ החנויות (או שעוד לא רץ) - יוצרים רשומת מינימום
-            saved = db.upsert(
-                "stores",
-                [{"chain_id": chain.id, "store_id_ext": items[0].store_id_ext}],
-                on_conflict="chain_id,store_id_ext",
-            )
-            if saved:
-                store_uuid = saved[0]["id"]
-                store_uuid_by_ext[items[0].store_id_ext] = store_uuid
-
-        if store_uuid is None:
-            log.warning("skipping price file %s - no store id resolved", ref.label)
-            continue
-
-        price_rows = []
-        for it in items:
-            product_id = _resolve_product(chain.id, it.chain_item_code, it.gtin, it.item_name, it.is_weighted)
-            price_rows.append(
-                {
-                    "product_id": product_id,
-                    "store_id": store_uuid,
-                    "price": str(it.price),
-                    "unit_price": str(it.unit_of_measure_price) if it.unit_of_measure_price else None,
-                    "unit_of_measure": it.unit_of_measure,
-                }
-            )
-        db.upsert("prices", price_rows, on_conflict="product_id,store_id")
-        log.info("prices: upserted %d rows for store %s", len(price_rows), store_ext)
-
-    # 3) מבצעים - עד עכשיו הפרסר היה קיים אבל לא היה מחובר בפועל
-    promo_files_done = 0
-    for (kind, store_ext), ref in latest.items():
-        if kind != "promos":
-            continue
-        if promo_files_done >= MAX_PROMO_FILES:
-            break
-        promo_files_done += 1
-
-        store_uuid = store_uuid_by_ext.get(store_ext) if store_ext else None
-        if store_uuid is None:
-            log.warning("skipping promo file %s - no store id resolved", ref.label)
-            continue
-
-        payload = adapter.download(ref)
-        promo_items = parse_promo_file(payload)[:MAX_ITEMS]
-
-        promo_rows = []
-        skipped = 0
-        for pr in promo_items:
-            product_id = _find_existing_product(chain.id, pr.chain_item_code)
-            if product_id is None:
-                skipped += 1
-                continue  # מבצע על מוצר שעדיין לא ראינו במחירים - מדלגים, לא ממציאים מוצר
-            promo_rows.append(
-                {
-                    "product_id": product_id,
-                    "store_id": store_uuid,
-                    "description": pr.description,
-                    "promo_price": str(pr.promo_price) if pr.promo_price else None,
-                    "club_required": pr.club_required,
-                }
-            )
-        # יכול להיות יותר ממבצע אחד על אותו מוצר באותו קובץ (למשל מבצע כללי
-        # ומבצע מועדון). Postgres מסרב לעדכן את אותה שורה פעמיים באותה פקודה,
-        # אז מאחדים כאן ובוחרים את המבצע המשתלם ביותר (המחיר הנמוך ביותר).
-        deduped: dict[str, dict] = {}
-        for row in promo_rows:
-            pid = row["product_id"]
-            current = deduped.get(pid)
-            if current is None:
-                deduped[pid] = row
-                continue
-            new_price = row.get("promo_price")
-            old_price = current.get("promo_price")
-            if new_price is not None and (old_price is None or float(new_price) < float(old_price)):
-                deduped[pid] = row
-        promo_rows = list(deduped.values())
-
-        if promo_rows:
-            db.upsert("promos", promo_rows, on_conflict="product_id,store_id")
-        log.info("promos: upserted %d rows for store %s (skipped %d unmatched)", len(promo_rows), store_ext, skipped)
-
-
-_product_cache: dict[str, str] = {}  # gtin/alias-key -> product uuid, per-run cache
-
-
-def _resolve_product(chain_id: str, chain_item_code: str, gtin: str | None, name: str, is_weighted: bool) -> str:
-    cache_key = f"gtin:{gtin}" if gtin else f"alias:{chain_id}:{chain_item_code}"
-    if cache_key in _product_cache:
-        return _product_cache[cache_key]
-
-    if gtin:
-        saved = db.upsert(
-            "products",
-            [{"gtin": gtin, "canonical_name": name, "is_weighted": is_weighted}],
-            on_conflict="gtin",
-        )
-        product_id = saved[0]["id"]
-    else:
-        # אין ברקוד (מוצר שקילה) - יוצרים/מוצאים דרך alias פר-רשת
-        existing = db.select_one("product_aliases", {"chain_id": chain_id, "chain_item_code": chain_item_code})
-        if existing:
-            product_id = existing["product_id"]
+        seen.add(key)
+        a = agg.get(key)
+        if a is None:
+            agg[key] = ItemAgg(gtin, r.code, _clean(r.name), r.weighted, r.price, r.unit_price, r.unit)
         else:
-            saved = db.upsert(
-                "products",
-                [{"canonical_name": name, "is_weighted": True}],
-                on_conflict="gtin",  # gtin is null so this always inserts a new row
-            )
-            product_id = saved[0]["id"]
-            db.upsert(
-                "product_aliases",
-                [{"product_id": product_id, "chain_id": chain_id, "chain_item_code": chain_item_code, "raw_name": name}],
-                on_conflict="chain_id,chain_item_code",
-            )
-
-    _product_cache[cache_key] = product_id
-    return product_id
+            a.merge(r.price, r.unit_price)
 
 
-def _find_existing_product(chain_id: str, chain_item_code: str) -> str | None:
-    """למבצעים: רק מקשרים למוצר שכבר ראינו בקובץ המחירים. לא יוצרים חדש
-    בלי שם אמיתי - זה היה יוצר רשומות-רפאים בטבלת products."""
-    cache_key = f"alias:{chain_id}:{chain_item_code}"
-    if cache_key in _product_cache:
-        return _product_cache[cache_key]
-    if chain_item_code.isdigit() and len(chain_item_code) in (12, 13, 14):
-        gtin_key = f"gtin:{chain_item_code}"
-        if gtin_key in _product_cache:
-            return _product_cache[gtin_key]
-        found = db.select_one("products", {"gtin": chain_item_code})
-        if found:
-            return found["id"]
-    existing = db.select_one("product_aliases", {"chain_id": chain_id, "chain_item_code": chain_item_code})
-    return existing["product_id"] if existing else None
+def process_files(adapter, refs, parse, consume, deadline):
+    """מוריד ומפרסר קבצים במקביל (בבאצ'ים קטנים - זיכרון חסום). מחזיר (הצליחו, נכשלו, נעצר)."""
+    ok = failed = 0
+    stopped = False
+
+    def fetch(ref):
+        try:
+            return ref, list(parse(adapter.download(ref))), None
+        except Exception as exc:  # noqa: BLE001 - כל כשל בקובץ בודד נספר, לא מפיל את הרשת
+            return ref, None, exc
+
+    step = WORKERS * 2
+    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+        for i in range(0, len(refs), step):
+            if time.time() > deadline:
+                stopped = True
+                break
+            for ref, rows, err in ex.map(fetch, refs[i:i + step]):
+                if err is not None:
+                    failed += 1
+                    log.warning("file failed %s: %s", ref.label, err)
+                else:
+                    consume(rows)
+                    ok += 1
+    return ok, failed, stopped
+
+
+# ------------------------------ אינדקסים ------------------------------
+
+def load_gtin_index() -> dict[str, str]:
+    rows = db.select_all("products", "id,gtin", {"gtin": "not.is.null"}, order="id")
+    idx: dict[str, str] = {}
+    for r in rows:
+        idx.setdefault(norm_gtin(r["gtin"]) or r["gtin"], r["id"])
+    return idx
+
+
+def load_alias_index(chain_id: str) -> dict[str, str]:
+    rows = db.select_all("product_aliases", "chain_item_code,product_id", {"chain_id": f"eq.{chain_id}"}, order="chain_item_code")
+    return {r["chain_item_code"]: r["product_id"] for r in rows}
+
+
+def map_code(code: str, gtin_index, alias_index) -> str | None:
+    g = norm_gtin(code)
+    if g and g in gtin_index:
+        return gtin_index[g]
+    return alias_index.get(code)
+
+
+# ------------------------------ כתיבה ל-DB ------------------------------
+
+def ensure_chain(chain: ChainConfig) -> str:
+    db.upsert("chains", [{"id": chain.id, "display_name": chain.display_name, "portal_type": chain.portal_type}], "id")
+    rows = db.upsert("stores", [{"chain_id": chain.id, "store_id_ext": "ALL", "name": "כל הסניפים"}],
+                     "chain_id,store_id_ext", returning=True)
+    return rows[0]["id"]
+
+
+def sync_real_stores(adapter, latest, chain: ChainConfig) -> None:
+    """רשימת הסניפים האמיתיים (שם/עיר/כתובת) - לשימוש עתידי במיקום. best-effort."""
+    rows: dict[str, dict] = {}
+    for (kind, _), ref in latest.items():
+        if kind != "stores":
+            continue
+        try:
+            for s in parse_stores_file(adapter.download(ref)):
+                rows.setdefault(s.store_id_ext, {"chain_id": chain.id, "store_id_ext": s.store_id_ext,
+                                                 "name": s.name, "city": s.city, "address": s.address})
+        except Exception as exc:  # noqa: BLE001
+            log.warning("stores file failed %s: %s", ref.label, exc)
+    rows.pop("ALL", None)
+    if rows:
+        db.upsert("stores", list(rows.values()), "chain_id,store_id_ext")
+
+
+def resolve_products(chain: ChainConfig, agg, gtin_index, alias_index) -> tuple[dict[str, str], int]:
+    """לכל פריט באגרגציה - מוצא product_id קיים או יוצר חדש (בבאצ'ים, id נוצר אצלנו)."""
+    pid_by_key: dict[str, str] = {}
+    new_products: list[dict] = []
+    new_aliases: list[dict] = []
+    for key, a in agg.items():
+        if a.gtin:
+            pid = gtin_index.get(a.gtin)
+            if pid is None:
+                pid = str(uuid.uuid4())
+                gtin_index[a.gtin] = pid
+                new_products.append({"id": pid, "gtin": a.gtin, "canonical_name": a.name, "is_weighted": a.weighted})
+        else:
+            pid = alias_index.get(a.code)
+            if pid is None:
+                pid = str(uuid.uuid4())
+                alias_index[a.code] = pid
+                new_products.append({"id": pid, "gtin": None, "canonical_name": a.name, "is_weighted": a.weighted})
+                new_aliases.append({"product_id": pid, "chain_id": chain.id, "chain_item_code": a.code, "raw_name": a.name})
+        pid_by_key[key] = pid
+    if new_products:
+        inserted = db.upsert("products", new_products, "gtin", ignore_duplicates=True, returning=True)
+        inserted_ids = {r["id"] for r in inserted}
+        # הגנה: מוצר שכבר היה קיים ב-DB אבל חסר באינדקס שלנו נדחה בשקט (ignore-duplicates),
+        # וה-id שיצרנו לא קיים. מזהים אותם ומתקנים ל-id האמיתי, אחרת נכתוב מחירים עם מזהה שגוי.
+        lost = {p["id"]: p["gtin"] for p in new_products if p["gtin"] and p["id"] not in inserted_ids}
+        if lost:
+            gtins = list(lost.values())
+            real: dict[str, str] = {}
+            for i in range(0, len(gtins), 100):
+                for r in db.select_all("products", "id,gtin", {"gtin": f"in.({','.join(gtins[i:i + 100])})"}, order="id"):
+                    real[r["gtin"]] = r["id"]
+            remap = {old_id: real[g] for old_id, g in lost.items() if g in real}
+            for g, rid in real.items():
+                gtin_index[g] = rid
+            for k, v in pid_by_key.items():
+                if v in remap:
+                    pid_by_key[k] = remap[v]
+            log.warning("%s: %d products already existed but were missing from the index (healed)", chain.id, len(lost))
+    if new_aliases:
+        db.upsert("product_aliases", new_aliases, "chain_id,chain_item_code", ignore_duplicates=True)
+    return pid_by_key, len(new_products)
+
+
+def _price_row(pid, store_id, pmin, pmax, umin, unit, carrying, in_stock, now_iso) -> dict:
+    return {"product_id": pid, "store_id": store_id, "price": str(pmin), "price_max": str(pmax),
+            "unit_price": None if umin is None else str(umin), "unit_of_measure": unit,
+            "in_stock": in_stock, "stores_carrying": carrying, "updated_at": now_iso}
+
+
+def sync_prices(agg, pid_by_key, pseudo_id: str, complete: bool, now_iso: str) -> dict:
+    existing = {r["product_id"]: r for r in db.select_all(
+        "prices", "product_id,price,price_max,unit_price,unit_of_measure,stores_carrying,in_stock",
+        {"store_id": f"eq.{pseudo_id}"}, order="product_id")}
+
+    changed: list[dict] = []
+    seen: set[str] = set()
+    for key, a in agg.items():
+        pid = pid_by_key[key]
+        seen.add(pid)
+        new = (_q(a.pmin), _q(a.pmax), _q(a.umin), a.count)
+        old = existing.get(pid)
+        if old and old.get("in_stock") and (
+            _q(old["price"]), _q(old.get("price_max") if old.get("price_max") is not None else old["price"]),
+            _q(old.get("unit_price")), old.get("stores_carrying"),
+        ) == new:
+            continue  # לא השתנה - לא נוגעים (חוסך כתיבות ו-bloat)
+        changed.append(_price_row(pid, pseudo_id, new[0], new[1], new[2], a.unit, a.count, True, now_iso))
+
+    absent: list[dict] = []
+    note = None
+    if complete:
+        live_before = sum(1 for r in existing.values() if r.get("in_stock"))
+        if live_before and len(seen & {p for p, r in existing.items() if r.get("in_stock")}) < SUSPICIOUS_DROP * live_before:
+            note = f"suspicious drop ({len(seen)} seen vs {live_before} live) - not marking absences"
+            log.warning(note)
+        else:
+            for pid, old in existing.items():
+                if pid in seen or not old.get("in_stock"):
+                    continue
+                pm = old.get("price_max") if old.get("price_max") is not None else old["price"]
+                absent.append(_price_row(pid, pseudo_id, _q(old["price"]), _q(pm), _q(old.get("unit_price")),
+                                         old.get("unit_of_measure"), 0, False, now_iso))
+
+    db.upsert("prices", changed + absent, "product_id,store_id")
+
+    if complete and note is None:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=PRUNE_DAYS)).isoformat()
+        db.delete("prices", {"store_id": f"eq.{pseudo_id}", "in_stock": "eq.false", "updated_at": f"lt.{cutoff}"})
+
+    return {"changed": len(changed), "absent": len(absent), "unchanged": len(agg) - len(changed), "note": note}
+
+
+def sync_promos(adapter, latest, pseudo_id, gtin_index, alias_index, deadline, now_iso) -> int:
+    refs = [r for (k, _), r in latest.items() if k == "promos_full"]
+    if not refs:
+        log.info("no PromoFull files for this chain")
+        return 0
+    best: dict[str, tuple] = {}
+
+    def consume(rows):
+        for p in rows:
+            cur = best.get(p.code)
+            if cur is None or p.price_each < cur[0]:
+                best[p.code] = (p.price_each, p.description, p.club)
+
+    ok, failed, stopped = process_files(adapter, refs, lambda b: iter_promo_rows(b), consume, deadline)
+    rows: dict[str, dict] = {}
+    for code, (price, desc, club) in best.items():
+        pid = map_code(code, gtin_index, alias_index)
+        if not pid:
+            continue
+        cur = rows.get(pid)
+        if cur is None or price < Decimal(cur["promo_price"]):
+            rows[pid] = {"product_id": pid, "store_id": pseudo_id, "description": desc,
+                         "promo_price": str(price), "club_required": club, "updated_at": now_iso}
+    db.upsert("promos", list(rows.values()), "product_id,store_id")
+
+    if ok > 0 and failed == 0 and not stopped:  # תמונה מלאה בלבד - רק אז מוחקים מבצעים שהסתיימו
+        existing = db.select_all("promos", "product_id", {"store_id": f"eq.{pseudo_id}"}, order="product_id")
+        stale = [r["product_id"] for r in existing if r["product_id"] not in rows]
+        for i in range(0, len(stale), 80):
+            db.delete("promos", {"store_id": f"eq.{pseudo_id}", "product_id": f"in.({','.join(stale[i:i + 80])})"})
+    return len(rows)
+
+
+def write_status(chain, *, stores_total, products_total, complete, note, now_iso) -> None:
+    row = {"chain_id": chain.id, "last_attempt_at": now_iso, "stores_total": stores_total,
+           "products_total": products_total, "complete": complete, "note": note}
+    if complete:
+        row["last_complete_at"] = now_iso
+    db.upsert("ingest_status", [row], "chain_id")
+
+
+# ------------------------------ רשת אחת ------------------------------
+
+def run_chain(chain: ChainConfig, gtin_index: dict[str, str], deadline: float) -> dict:
+    t0 = time.time()
+    adapter = build_adapter(chain)
+    refs = list(adapter.list_files())
+    if not refs:
+        raise PortalAccessError("empty file listing")
+    latest = select_latest(refs)
+
+    price_refs = [r for (k, _), r in latest.items() if k == "prices_full"]
+    complete = bool(getattr(adapter, "listing_complete", True))
+    notes: list[str] = []
+    if not complete:
+        notes.append("file listing incomplete")
+    if not price_refs:
+        price_refs = [r for (k, _), r in latest.items() if k == "prices_delta"]
+        complete = False
+        notes.append("no PriceFull files - used delta files, absences not marked")
+        if not price_refs:
+            raise PortalAccessError("no price files in listing")
+    log.info("%s: %d files listed, %d price files (stores)", chain.id, len(refs), len(price_refs))
+
+    pseudo_id = ensure_chain(chain)
+    sync_real_stores(adapter, latest, chain)
+
+    agg: dict[str, ItemAgg] = {}
+    ok, failed, stopped = process_files(adapter, price_refs, iter_price_rows, lambda rows: add_file(agg, rows), deadline)
+    if ok == 0:
+        raise PortalAccessError(f"all {failed} price files failed")
+    if failed or stopped:
+        complete = False
+        notes.append(f"{failed} files failed, stopped={stopped} - absences not marked")
+    log.info("%s: parsed %d/%d files -> %d distinct products", chain.id, ok, len(price_refs), len(agg))
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    alias_index = load_alias_index(chain.id)
+    pid_by_key, new_products = resolve_products(chain, agg, gtin_index, alias_index)
+    stats = sync_prices(agg, pid_by_key, pseudo_id, complete, now_iso)
+    if stats["note"]:
+        complete = False
+        notes.append(stats["note"])
+    promos = sync_promos(adapter, latest, pseudo_id, gtin_index, alias_index, deadline, now_iso)
+
+    write_status(chain, stores_total=len(price_refs), products_total=len(agg), complete=complete,
+                 note="; ".join(notes) or None, now_iso=now_iso)
+    res = {"chain": chain.id, "stores": len(price_refs), "products": len(agg), "new_products": new_products,
+           "price_rows_written": stats["changed"], "marked_unavailable": stats["absent"],
+           "promos": promos, "complete": complete, "seconds": round(time.time() - t0)}
+    log.info("%s: DONE %s", chain.id, res)
+    return res
 
 
 def main() -> None:
-    failures = []
+    start = time.time()
+    deadline = start + float(os.environ.get("INGEST_DEADLINE_MIN", "320")) * 60
+    gtin_index = load_gtin_index()
+    log.info("loaded %d known barcodes", len(gtin_index))
+
+    summary: list[str] = []
+    hard_failures: list[str] = []
     for chain in CHAINS:
         if not chain.active:
-            log.info("skipping %s - disabled in config", chain.id)
             continue
-        if not chain.portal_username and chain.portal_type == "cerberus":
-            log.warning("skipping %s - no portal_username configured", chain.id)
+        if time.time() > deadline:
+            summary.append(f"{chain.id}: SKIPPED (time budget)")
             continue
         try:
-            run_chain(chain)
-        except Exception as exc:  # רשת אחת נופלת, השאר ממשיכות
-            log.exception("chain %s failed: %s", chain.id, exc)
-            failures.append(chain.id)
+            r = run_chain(chain, gtin_index, deadline)
+            summary.append(f"{chain.id}: OK products={r['products']} stores={r['stores']} "
+                           f"complete={r['complete']} ({r['seconds']}s)")
+        except PortalAccessError as exc:
+            log.warning("%s: skipped - %s", chain.id, exc)
+            summary.append(f"{chain.id}: SKIPPED ({exc})")
+            if chain.verified:
+                hard_failures.append(chain.id)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("%s failed: %s", chain.id, exc)
+            summary.append(f"{chain.id}: FAILED ({exc})")
+            if chain.verified:
+                hard_failures.append(chain.id)
 
-    if failures:
-        log.error("finished with failures: %s", failures)
+    log.info("=========== SUMMARY (%.0f min) ===========", (time.time() - start) / 60)
+    for line in summary:
+        log.info(line)
+    if hard_failures:
+        log.error("verified chains failed: %s", hard_failures)
         sys.exit(1)
-    log.info("all chains completed successfully")
 
 
 if __name__ == "__main__":

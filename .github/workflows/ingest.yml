@@ -2,15 +2,22 @@ name: ingest prices
 
 on:
   schedule:
-    # כל 4 שעות. החוק מחייב עדכון עד אחת לשעה בשינויים - אפשר להדק בהמשך,
-    # רק לזכור שכל ריצה = כמה דקות ריצה בחינם מתוך המכסה החודשית של GitHub.
-    - cron: "17 */4 * * *"
-  workflow_dispatch: {}   # מאפשר גם להריץ ידנית מטאב Actions בגיטהאב
+    # פעמיים ביום (UTC): 03:30 ו-13:30 = 06:30/05:30 ו-16:30/15:30 בישראל.
+    # הרשתות מפרסמות את הקטלוג המלא (PriceFull) בבוקר; הריצה השנייה תופסת רשתות
+    # שמפרסמות קובץ מלא נוסף במהלך היום, ומשלימה ריצה שנכשלה.
+    - cron: "30 3 * * *"
+    - cron: "30 13 * * *"
+  workflow_dispatch: {}
+
+# ריצה אחת בכל רגע. אם הקודמת עוד רצה - הבאה מחכה, ולא מבטלת אותה באמצע.
+concurrency:
+  group: ingest
+  cancel-in-progress: false
 
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -20,7 +27,15 @@ jobs:
 
       - run: pip install -r ingest/requirements.txt
 
+      - name: tests
+        run: python -m unittest ingest.tests.test_pipeline
+        env:
+          SUPABASE_URL: https://example.invalid
+          SUPABASE_SERVICE_KEY: sb_secret_test
+
       - run: python -m ingest.main
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          INGEST_WORKERS: "4"
+          INGEST_DEADLINE_MIN: "320"
