@@ -32,7 +32,7 @@ from decimal import Decimal
 from . import db
 from .config import CHAINS, ChainConfig
 from .parser import iter_price_rows, iter_promo_rows, norm_gtin, parse_stores_file, to_gtin
-from .sources.base import PortalAccessError, select_latest
+from .sources.base import NoPriceFilesYet, PortalAccessError, describe_listing, select_latest
 from .sources.carrefour import CarrefourAdapter
 from .sources.cerberus import CerberusAdapter
 from .sources.shufersal import ShufersalAdapter
@@ -46,9 +46,9 @@ SUSPICIOUS_DROP = 0.5     # אם פחות מ-50% מהמוצרים הקיימים
 _Q = Decimal("0.01")
 
 
-def build_adapter(chain: ChainConfig):
+def build_adapter(chain: ChainConfig, username: str | None = None):
     if chain.portal_type == "cerberus":
-        return CerberusAdapter(username=chain.portal_username)
+        return CerberusAdapter(username=username or chain.portal_username)
     if chain.portal_type == "shufersal_direct":
         return ShufersalAdapter()
     if chain.portal_type == "carrefour_direct":
@@ -268,7 +268,7 @@ def sync_prices(agg, pid_by_key, pseudo_id: str, complete: bool, now_iso: str) -
     return {"changed": len(changed), "absent": len(absent), "unchanged": len(agg) - len(changed), "note": note}
 
 
-def sync_promos(adapter, latest, pseudo_id, gtin_index, alias_index, deadline, now_iso) -> int:
+def sync_promos(chain_id, adapter, latest, pseudo_id, gtin_index, alias_index, deadline, now_iso) -> int:
     refs = [r for (k, _), r in latest.items() if k == "promos_full"]
     if not refs:
         log.info("no PromoFull files for this chain")
@@ -281,7 +281,8 @@ def sync_promos(adapter, latest, pseudo_id, gtin_index, alias_index, deadline, n
             if cur is None or p.price_each < cur[0]:
                 best[p.code] = (p.price_each, p.description, p.club)
 
-    ok, failed, stopped = process_files(adapter, refs, lambda b: iter_promo_rows(b), consume, deadline)
+    stats: dict = {}
+    ok, failed, stopped = process_files(adapter, refs, lambda b: iter_promo_rows(b, stats=stats), consume, deadline)
     rows: dict[str, dict] = {}
     for code, (price, desc, club) in best.items():
         pid = map_code(code, gtin_index, alias_index)
@@ -292,6 +293,14 @@ def sync_promos(adapter, latest, pseudo_id, gtin_index, alias_index, deadline, n
             rows[pid] = {"product_id": pid, "store_id": pseudo_id, "description": desc,
                          "promo_price": str(price), "club_required": club, "updated_at": now_iso}
     db.upsert("promos", list(rows.values()), "product_id,store_id")
+    # אבחון: אם רשת מניבה מעט/אפס מבצעים, השורות האלה אומרות למה (ואילו תגיות יש בקובץ)
+    log.info("%s promos: files=%d promotions=%d usable=%d percent_only=%d no_price=%d no_items=%d expired=%d "
+             "distinct_products=%d matched_to_catalog=%d", chain_id, ok, stats.get("promotions", 0), stats.get("ok", 0),
+             stats.get("percent_only", 0), stats.get("no_price", 0), stats.get("no_items", 0), stats.get("expired", 0),
+             len(best), len(rows))
+    if not rows:
+        top = sorted(stats.get("tags", {}).items(), key=lambda kv: -kv[1])[:14]
+        log.info("%s promos: no usable rows. most common tags in the promo files: %s", chain_id, top)
 
     if ok > 0 and failed == 0 and not stopped:  # תמונה מלאה בלבד - רק אז מוחקים מבצעים שהסתיימו
         existing = db.select_all("promos", "product_id", {"store_id": f"eq.{pseudo_id}"}, order="product_id")
@@ -313,10 +322,24 @@ def write_status(chain, *, stores_total, products_total, complete, note, now_iso
 
 def run_chain(chain: ChainConfig, gtin_index: dict[str, str], deadline: float) -> dict:
     t0 = time.time()
-    adapter = build_adapter(chain)
-    refs = list(adapter.list_files())
+    usernames = [chain.portal_username, *chain.alt_usernames] if chain.portal_type == "cerberus" else [None]
+    adapter, refs, last_err = None, [], None
+    for uname in usernames:
+        adapter = build_adapter(chain, uname) if uname else build_adapter(chain)
+        try:
+            refs = list(adapter.list_files())
+        except PortalAccessError as exc:
+            last_err = exc
+            continue  # שם משתמש שגוי - מנסים את הבא
+        if uname and uname != chain.portal_username:
+            log.warning("%s: logged in with alternate username '%s' - update config.py", chain.id, uname)
+        last_err = None
+        break
+    if last_err is not None:
+        raise last_err
+    diag = describe_listing(refs, getattr(adapter, "unparsed", None), getattr(adapter, "unparsed_count", 0))
     if not refs:
-        raise PortalAccessError("empty file listing")
+        raise PortalAccessError(f"no recognised files in listing ({diag})")
     latest = select_latest(refs)
 
     price_refs = [r for (k, _), r in latest.items() if k == "prices_full"]
@@ -329,7 +352,7 @@ def run_chain(chain: ChainConfig, gtin_index: dict[str, str], deadline: float) -
         complete = False
         notes.append("no PriceFull files - used delta files, absences not marked")
         if not price_refs:
-            raise PortalAccessError("no price files in listing")
+            raise NoPriceFilesYet(f"no price files in listing ({diag})")
     log.info("%s: %d files listed, %d price files (stores)", chain.id, len(refs), len(price_refs))
 
     pseudo_id = ensure_chain(chain)
@@ -351,7 +374,7 @@ def run_chain(chain: ChainConfig, gtin_index: dict[str, str], deadline: float) -
     if stats["note"]:
         complete = False
         notes.append(stats["note"])
-    promos = sync_promos(adapter, latest, pseudo_id, gtin_index, alias_index, deadline, now_iso)
+    promos = sync_promos(chain.id, adapter, latest, pseudo_id, gtin_index, alias_index, deadline, now_iso)
 
     write_status(chain, stores_total=len(price_refs), products_total=len(agg), complete=complete,
                  note="; ".join(notes) or None, now_iso=now_iso)
@@ -380,6 +403,11 @@ def main() -> None:
             r = run_chain(chain, gtin_index, deadline)
             summary.append(f"{chain.id}: OK products={r['products']} stores={r['stores']} "
                            f"complete={r['complete']} ({r['seconds']}s)")
+        except NoPriceFilesYet as exc:
+            # הרשת עונה ויש בה קבצים, אבל קובצי המחירים של היום עוד לא פורסמו - לא כשל.
+            # הריצה הבאה (או המשך היום) תתפוס אותם; המחירים הקיימים נשארים כמו שהם.
+            log.warning("%s: nothing to ingest right now - %s", chain.id, exc)
+            summary.append(f"{chain.id}: NOT PUBLISHED YET ({exc})")
         except PortalAccessError as exc:
             log.warning("%s: skipped - %s", chain.id, exc)
             summary.append(f"{chain.id}: SKIPPED ({exc})")

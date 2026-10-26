@@ -34,6 +34,8 @@ class CerberusAdapter:
         self.session.headers["User-Agent"] = _UA
         self._logged_in = False
         self.listing_complete = True  # יהפוך False אם הדפדוף נקטע באמצע
+        self.unparsed: list[str] = []
+        self.unparsed_count = 0
 
     def _csrf(self, html: str) -> str:
         m = re.search(r'name="csrftoken"\s+content="([^"]+)"', html)
@@ -86,6 +88,10 @@ class CerberusAdapter:
                 ref = build_ref(n, f"{PORTAL_BASE}/file/d/{n}")
                 if ref:
                     out.append(ref)
+                else:
+                    self.unparsed_count += 1
+                    if len(self.unparsed) < 8:
+                        self.unparsed.append(n)
             if len(names) < _PAGE:
                 break
             start += _PAGE

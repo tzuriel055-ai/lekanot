@@ -38,6 +38,8 @@ class ShufersalAdapter:
         self.session = requests.Session()
         self.session.headers["User-Agent"] = _UA
         self.listing_complete = True
+        self.unparsed: list[str] = []
+        self.unparsed_count = 0
 
     def _page(self, cat: int, page: int) -> str:
         return get_bytes(
@@ -72,6 +74,10 @@ class ShufersalAdapter:
                     ref = build_ref(fname, url, meta={"cat": cat, "page": page})
                     if ref:
                         out.append(ref)
+                    else:
+                        self.unparsed_count += 1
+                        if len(self.unparsed) < 8:
+                            self.unparsed.append(fname)
                 if not hrefs or fresh == 0:
                     exhausted = True
                     break

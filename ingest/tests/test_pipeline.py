@@ -148,7 +148,7 @@ class PipelineTests(unittest.TestCase):
         for fn in ("upsert", "select_all", "delete"):
             setattr(db, fn, getattr(self.fdb, fn))
         self.adapter = FakeAdapter(day1_files())
-        main.build_adapter = lambda chain: self.adapter
+        main.build_adapter = lambda chain, username=None: self.adapter
         self.deadline = time.time() + 999
 
     def run_chain(self, gtin_index=None):
@@ -273,11 +273,61 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(all(r["product_id"] in pids for r in self.fdb.rows("prices")), "every price must reference a real product")
         self.assertGreater(res["price_rows_written"], 0)
 
+
+    # ---------------------- v4: לקחים מהריצה האמיתית הראשונה ----------------------
+    def test_prices_not_published_yet_is_not_a_failure_even_for_verified_chain(self):
+        """אושר עד בבוקר: יש קבצים ברשימה אבל עוד אין מחירים. זה לא כשל ולא מכשיל את הריצה."""
+        only_promos = {k: v for k, v in day1_files().items() if k.startswith(("PromoFull", "StoresFull"))}
+        main.build_adapter = lambda chain, username=None: FakeAdapter(only_promos)
+        main.load_gtin_index = lambda: {}
+        main.CHAINS[:] = [ChainConfig("early", "x", "cerberus", "x", verified=True)]
+        main.main()  # לא אמור לזרוק SystemExit
+        self.assertEqual(self.fdb.rows("prices"), [], "nothing written, existing data untouched")
+
+    def test_unrecognised_file_names_are_reported_in_the_error(self):
+        class Weird(FakeAdapter):
+            unparsed = ["PRICES_2026.csv", "something.txt"]
+            unparsed_count = 2
+        main.build_adapter = lambda chain, username=None: Weird({})
+        with self.assertRaises(PortalAccessError) as cm:
+            self.run_chain()
+        msg = str(cm.exception)
+        self.assertIn("unrecognised names=2", msg)
+        self.assertIn("PRICES_2026.csv", msg)
+
+    def test_alternate_username_is_tried_when_first_fails(self):
+        used = []
+        class BadLogin:
+            listing_complete = True
+            def list_files(self): raise PortalAccessError("wrong username")
+        def builder(chain, username=None):
+            used.append(username)
+            return BadLogin() if username == "Wrong" else self.adapter
+        main.build_adapter = builder
+        chain = ChainConfig("alt", "x", "cerberus", "Wrong", verified=False, alt_usernames=("right",))
+        res = main.run_chain(chain, {}, self.deadline)
+        self.assertEqual(used, ["Wrong", "right"])
+        self.assertEqual(res["stores"], 3)
+
+    def test_promo_diagnostics_explain_zero_promos(self):
+        from ingest.parser import iter_promo_rows
+        xml = gzip.compress("""<Root><Promotions>
+          <Promotion><DiscountRate>20</DiscountRate><PromotionItems><Item><ItemCode>1</ItemCode></Item></PromotionItems></Promotion>
+          <Promotion><DiscountedPrice>5</DiscountedPrice><MinQty>1</MinQty></Promotion>
+          <Promotion><DiscountedPrice>5</DiscountedPrice><MinQty>1</MinQty><PromotionEndDate>2020-01-01</PromotionEndDate><PromotionItems><Item><ItemCode>2</ItemCode></Item></PromotionItems></Promotion>
+          <Promotion><DiscountedPrice>5</DiscountedPrice><MinQty>1</MinQty><PromotionItems><Item><ItemCode>3</ItemCode></Item></PromotionItems></Promotion>
+        </Promotions></Root>""".encode())
+        stats = {}
+        rows = list(iter_promo_rows(xml, stats=stats))
+        self.assertEqual([r.code for r in rows], ["3"])
+        self.assertEqual((stats["promotions"], stats["percent_only"], stats["no_items"], stats["expired"], stats["ok"]), (4, 1, 1, 1, 1))
+        self.assertIn("promotion", stats["tags"])
+
     def test_access_error_policy(self):
         class Boom:
             listing_complete = True
             def list_files(self): raise PortalAccessError("no files")
-        main.build_adapter = lambda chain: Boom()
+        main.build_adapter = lambda chain, username=None: Boom()
         main.load_gtin_index = lambda: {}
         main.CHAINS[:] = [ChainConfig("unv", "x", "cerberus", "x", verified=False)]
         main.main()  # רשת לא מאומתת שנכשלה - לא מפילה את הריצה

@@ -21,6 +21,7 @@ class ChainConfig:
     portal_username: str = ""
     active: bool = True
     verified: bool = True
+    alt_usernames: tuple = ()   # מנוסים לפי הסדר אם הראשי נכשל; הלוג יגיד איזה עבד
     extra: dict = field(default_factory=dict)
 
 
@@ -40,7 +41,8 @@ CHAINS: list[ChainConfig] = [
     ChainConfig("fresh-market", "פרש מרקט", "cerberus", "freshmarket", verified=False),
     ChainConfig("dor-alon", "אלונית (דור אלון)", "cerberus", "doralon", verified=False),
     ChainConfig("super-cofix", "סופר קופיקס", "cerberus", "SuperCofixApp", verified=False),
-    ChainConfig("yellow", "ילו", "cerberus", "Yellow", verified=False),
+    ChainConfig("yellow", "ילו", "cerberus", "Yellow", verified=False,
+                alt_usernames=("yellow", "Yellow_Ho", "yellow_ho", "YellowHo")),
     # --- מושבתות ---
     ChainConfig("victory", "ויקטורי", "cerberus", "victory", active=False, verified=False),
     ChainConfig("carrefour", "קרפור", "carrefour_direct", active=False, verified=False),

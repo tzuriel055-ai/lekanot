@@ -24,6 +24,21 @@ class PortalAccessError(Exception):
     """הפורטל לא החזיר קבצים (שם משתמש שגוי / התחברות נכשלה / פורטל שונה)."""
 
 
+class NoPriceFilesYet(PortalAccessError):
+    """ההתחברות עובדת ויש קבצים ברשימה, אבל אין בה קובצי מחירים (בד"כ: עוד לא פורסמו היום)."""
+
+
+def describe_listing(refs, unparsed=None, unparsed_count=0) -> str:
+    """תיאור קצר של מה שיש ברשימת הקבצים - לאבחון כשרשת לא מניבה נתונים."""
+    kinds: dict[str, int] = {}
+    for r in refs:
+        kinds[r.kind] = kinds.get(r.kind, 0) + 1
+    parts = [f"{k}={v}" for k, v in sorted(kinds.items())] or ["no recognised files"]
+    if unparsed_count:
+        parts.append(f"unrecognised names={unparsed_count}, e.g. {list(unparsed or [])[:5]}")
+    return ", ".join(parts)
+
+
 @dataclass
 class FileRef:
     kind: str        # prices_full | prices_delta | promos_full | promos_delta | stores

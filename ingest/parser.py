@@ -135,11 +135,22 @@ class PromoRow(NamedTuple):
     club: bool
 
 
-def iter_promo_rows(payload: bytes, today: date | None = None) -> Iterator[PromoRow]:
+def iter_promo_rows(payload: bytes, today: date | None = None, stats: dict | None = None) -> Iterator[PromoRow]:
+    """stats (אופציונלי): מונים לאבחון - כמה מבצעים נראו, ולמה כל אחד דולג, ואילו תגיות יש בקובץ."""
     today = today or date.today()
+
+    def bump(key):
+        if stats is not None:
+            stats[key] = stats.get(key, 0) + 1
+
     for _ev, el in ET.iterparse(io.BytesIO(decompress(payload)), events=("end",)):
-        if _local(el.tag) != "promotion":
+        tag = _local(el.tag)
+        if stats is not None:
+            tags = stats.setdefault("tags", {})
+            tags[tag] = tags.get(tag, 0) + 1
+        if tag != "promotion":
             continue
+        bump("promotions")
         f: dict[str, str] = {}
         codes: list[str] = []
         club = False
@@ -159,11 +170,16 @@ def iter_promo_rows(payload: bytes, today: date | None = None) -> Iterator[Promo
         el.clear()
 
         price = _dec(f.get("discountedprice"))
-        if price is None or price <= 0 or not codes:
+        if not codes:
+            bump("no_items")
+            continue
+        if price is None or price <= 0:
+            bump("percent_only" if f.get("discountrate") else "no_price")
             continue  # מבצעי אחוזים ללא מחיר מפורש - לא מנחשים
         end = f.get("promotionenddate", "")[:10]
         try:
             if end and date.fromisoformat(end) < today:
+                bump("expired")
                 continue
         except ValueError:
             pass
@@ -172,5 +188,6 @@ def iter_promo_rows(payload: bytes, today: date | None = None) -> Iterator[Promo
         if f.get("clubid", "") not in ("", "0"):
             club = True
         desc = f.get("promotiondescription") or None
+        bump("ok")
         for code in codes:
             yield PromoRow(code, desc, each, club)
