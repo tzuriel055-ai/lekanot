@@ -28,7 +28,7 @@ jobs:
       - run: pip install -r ingest/requirements.txt
 
       - name: tests
-        run: python -m unittest ingest.tests.test_pipeline
+        run: python -m unittest discover -s ingest/tests -t .
         env:
           SUPABASE_URL: https://example.invalid
           SUPABASE_SERVICE_KEY: sb_secret_test

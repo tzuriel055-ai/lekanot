@@ -34,12 +34,26 @@
 - `SKIPPED` — שם משתמש שגוי או שמות קבצים שלא זוהו (בסוגריים: דוגמאות לשמות, כדי לתקן).
 - שורות `<chain> promos:` — כמה מבצעים נראו ולמה כל אחד דולג; אם אין מבצעים שמישים, גם אילו תגיות יש בקובץ.
 
+## חשבונות ומיקום (v5)
+
+הקוד מוכן; ההפעלה בשרת היא חד-פעמית וחינמית:
+1. ב-Supabase להריץ את `supabase/migration_v5_accounts.sql` (פרופיל, רשימות לפי משתמש עם אבטחה ברמת שורה, מיקום סניפים).
+2. כניסה עם Google: פרויקט ב-Google Cloud ← OAuth client (Web) עם redirect `https://<project>.supabase.co/auth/v1/callback`; את ה-Client ID וה-Secret מדביקים ב-Supabase ← Authentication ← Providers ← Google. ב-Authentication ← URL Configuration מוסיפים את כתובת האתר ל-Site URL וגם ל-Redirect URLs.
+3. עד שמפעילים - כפתור Google באתר מושבת ומסומן כך, וקישור כניסה במייל כבר עובד.
+4. מיקום: GPS של הדפדפן + OpenStreetMap, בלי מפתחות. `ingest/geocode.py` (פעם בשבוע, או ידנית ב-Actions) מוצא קואורדינטות לסניפים פעם אחת ושומר לתמיד; רק אז האתר מציג "הסניף הקרוב".
+
+## פרסום האתר
+
+`.github/workflows/pages.yml` מפרסם את תיקיית `web` ל-GitHub Pages בכל push שנוגע בה (חינם, בלי מכסת פרסומים). ב-Settings ← Pages: Source = GitHub Actions.
+
 ## בדיקות
 
 ```bash
-SUPABASE_URL=https://x.supabase.co SUPABASE_SERVICE_KEY=x python -m unittest ingest.tests.test_pipeline -v
+SUPABASE_URL=https://x.supabase.co SUPABASE_SERVICE_KEY=x python -m unittest discover -s ingest/tests -t . -v   # צינור הנתונים + geocode
+node --test "tests/*.test.js"                                                                                 # האתר (חשבונות, רשימות, מיקום, השוואה)
+pip install playwright && playwright install chromium && python tests/e2e/visual_check.py                    # דפדפן אמיתי: פריסה, חפיפות, צילומי מסך
 ```
-רצות אוטומטית לפני כל משיכה ב-GitHub Actions; אם נכשלות - המשיכה לא מתחילה.
+הראשונות רצות אוטומטית ב-GitHub Actions (`tests.yml`, ולפני כל משיכה). אם נכשלות - המשיכה לא מתחילה.
 
 ## מה עדיין לא נעשה
 

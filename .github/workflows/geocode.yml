@@ -1,0 +1,25 @@
+name: geocode stores
+
+on:
+  schedule:
+    - cron: "0 2 * * 0"      # פעם בשבוע, יום ראשון בלילה
+  workflow_dispatch: {}
+
+concurrency:
+  group: geocode
+  cancel-in-progress: false
+
+jobs:
+  geocode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r ingest/requirements.txt
+      - run: python -m ingest.geocode
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
