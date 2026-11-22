@@ -49,7 +49,10 @@ function load({ hash = '', storage = {}, anonKey = 'sb_publishable_test', fetch:
     Map, Set, Number, Date, JSON, Object, Array, Math, String, Promise, Intl, isNaN, parseInt, parseFloat, encodeURIComponent, decodeURIComponent,
   };
   vm.createContext(ctx);
-  const html = fs.readFileSync(HTML_PATH, 'utf8').replace('"YOUR-ANON-KEY"', JSON.stringify(anonKey)).replace('https://YOUR-PROJECT.supabase.co', 'https://proj.supabase.co');
+  // בריפו המפתחות האמיתיים מוזרקים לקובץ, ובפיתוח הם placeholders - מנטרלים את שני המצבים
+  const html = fs.readFileSync(HTML_PATH, 'utf8')
+    .replace(/const SUPABASE_URL = "[^"]*";/, 'const SUPABASE_URL = "https://proj.supabase.co";')
+    .replace(/const SUPABASE_ANON_KEY = "[^"]*";/, `const SUPABASE_ANON_KEY = ${JSON.stringify(anonKey)};`);
   vm.runInContext(html.match(/<script>([\s\S]*)<\/script>/)[1], ctx);
   vm.runInContext('globalThis.__t = { state, auth, loc, LS, AUTH_LS }', ctx);
   return { ctx, els, store, calls, win, t: ctx.__t, html };

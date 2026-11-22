@@ -6,6 +6,7 @@ import os
 WEB = "file://" + os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "web", "index.html"))
 SHOTS = os.environ.get("SHOTS", "/tmp/lekanot-shots")
 os.makedirs(SHOTS, exist_ok=True)
+SUPA = re.search(r'const SUPABASE_URL = "(https://[^"]+)"', open(WEB[len("file://"):], encoding="utf-8").read()).group(1)
 CHAINS = [("A", "שופרסל"), ("B", "רמי לוי"), ("C", "יוחננוף")]
 PRODUCTS = [{"id": f"p{i}", "canonical_name": n, "is_weighted": w, "image_url": None, "gtin": f"729000000000{i}", "created_at": "2026-01-01"}
             for i, (n, w) in enumerate([("חלב תנובה 3% 1 ליטר", False), ("לחם אחיד פרוס", False), ("קוטג' 250 גרם", False), ("בננות", True),
@@ -44,7 +45,7 @@ def handler(route):
 
 def new_page(p, w, h):
     b = p.chromium.launch(); ctx = b.new_context(viewport={"width": w, "height": h}, device_scale_factor=1); pg = ctx.new_page()
-    pg.route(re.compile(r"https://your-project\.supabase\.co/.*", re.I), handler)
+    pg.route(re.compile(re.escape(SUPA) + r"/.*", re.I), handler)
     pg.route(re.compile(r"https://unpkg\.com/.*"), lambda r: r.fulfill(status=200, content_type="text/css", body=".ti{display:inline-block;width:1em;height:1em;background:currentColor;opacity:.35;border-radius:3px;vertical-align:-.1em}"))
     pg.route(re.compile(r"https://fonts\.(googleapis|gstatic)\.com/.*"), lambda r: r.abort())
     pg.on("pageerror", lambda e: print("PAGE ERROR:", e))
